@@ -2,7 +2,7 @@
 
 SNAP compilation of XXZ time evolution onto Isaac's corrected exact-angle library, with errors measured by plugging in the Clifford+T circuits. This is the time-evolution code for paper 1. It uses no catalysis and only unmixed (deterministic) synthesis, as decided on the 5 Oct 2026 call.
 
-The pipeline trains a translation-invariant brickwork for $e^{-iHt}$ and snaps its rotations onto the RUS library with the Hessian-ranked protocol. It then synthesizes the leftover rotations with Kliuchnikov non-mixed and measures the realized circuit's operator-norm and diamond error at $N = 6$ to $16$. That error is extrapolated to the 100-site ring. A product-formula baseline goes through the same measurement.
+The pipeline trains a translation-invariant brickwork for $e^{-iHt}$ and snaps its rotations onto the RUS library with the Hessian-ranked protocol. It then synthesizes the leftover rotations with Kliuchnikov non-mixed and measures the realized circuit at $N = 6$ to $16$, in operator norm and diamond norm and in fidelity (on product states and as a process fidelity). Both are taken to the 100-site ring, with the heralded fallback branches bounded exactly. A product-formula baseline goes through the same measurement.
 
 ## Install
 
@@ -13,7 +13,7 @@ python -m venv .venv
 .venv\Scripts\activate            (on Linux or macOS: source .venv/bin/activate)
 pip install -e .[test]
 python -m snapevo verify-library  (independent check of the library file, ~30 s)
-pytest                            (16 tests, ~1 min)
+pytest                            (18 tests, ~1 min)
 ```
 
 ## Run one point
@@ -31,7 +31,7 @@ python -m snapevo report   --model B --t 2
 
 ```
 docs/plan.md            the simulation plan: models, stages, budgets, order of work
-docs/error_metric.md    what error we report and why (unmixed method)
+docs/error_metric.md    the worst-case and fidelity metrics we report, and why (unmixed method)
 docs/cost_model.md      library and KN pricing, provenance, what is left out
 docs/conventions.md     units, gates, angle order, file formats
 docs/validation.md      checks run on the library, the port and the smoke run
@@ -46,7 +46,7 @@ src/snapevo/
   environment.py        exact single-angle C curves
   snap.py               Hessian-ranked SNAP compiler
   realize.py            plug in the Clifford+T circuits, error ledger
-  metrics.py            held-out C, exact op norm by Lanczos, N extrapolation
+  metrics.py            op norm and diamond (Lanczos), state and process fidelity, N = 100 totals
   baseline.py           product formulas + KN, measured the same way
   library_check.py      independent verification of the library file
   cli.py, io.py         command line, run-file layout

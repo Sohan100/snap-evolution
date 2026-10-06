@@ -111,8 +111,7 @@ def realize_baseline(circuit: Layered, eps: float) -> dict:
     for theta in rotation_tally(circuit):
         syn[theta] = synthesize(theta, eps)
     layers = []
-    Tq = 0.0
-    ledger = 0.0
+    Tq = ledger = ledger2 = 0.0
     for parity, angles in circuit.layers:
         real = angles.copy()
         for s, theta in enumerate(angles):
@@ -123,8 +122,9 @@ def realize_baseline(circuit: Layered, eps: float) -> dict:
             real[s] = r["theta_s"]
             Tq += 0.5 * r["expected_t"]
             ledger += 0.5 * (1.0 - r["p"]) * r["d_branch"]
+            ledger2 += 0.5 * (1.0 - r["p"]) * r["d_branch"] ** 2
         layers.append((parity, real))
     rot = 0.5 * sum(1 for _p, a in circuit.layers for th in a if abs(np.remainder(th + np.pi, 2 * np.pi) - np.pi) > 1e-12)
     return {"circuit": Layered(circuit.cell, layers), "Tq": Tq, "ledger_per_qubit": ledger,
-            "rotations_per_qubit": rot, "n_distinct": len(syn), "eps": eps,
+            "ledger2_per_qubit": ledger2, "rotations_per_qubit": rot, "n_distinct": len(syn), "eps": eps,
             "synth": {f"{k:.15f}": v for k, v in syn.items()}}

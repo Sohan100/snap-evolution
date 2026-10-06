@@ -31,6 +31,9 @@ Model A ($h_x = 1.6$, cell `xxz+x`) trains to about the same floors: $1.975\time
 | alpha / sqrt(C) | 1.95 |
 | extrapolated w(100) | 2.10 (affine), 2.40 (power) |
 | D_coh(100) | 1.86, saturated |
+| per-site process infidelity $c_e$, N = 6 to 14 | 1.04e-4 (exact to N = 10, Haar above) |
+| state infidelity, N = 10 / N = 100 | 1.02e-3 / 1.03e-2 (fallbacks included at N = 100) |
+| process infidelity, N = 100 | 1.05e-2 |
 | ledger at N = 100 | 1.06e-3 at F = 18 (8.4e-5 at F = 22) |
 | T per qubit (F = 18) | 70.5 |
 | T per rotation | 4.03 |
@@ -48,10 +51,11 @@ Lanczos timings for the exact operator norm at $D = 7$, single core under load, 
 | held-out C, Trotter only / realized | 3.85e-5 / 3.89e-5 |
 | alpha = w/N at N = 14 | 0.0116 |
 | D_total(100) | 1.11 (ledger 6.9e-3) |
+| state / process infidelity, N = 100 | 4.34e-3 / 4.37e-3 (Trotter alone 3.85e-3 / 3.87e-3) |
 | T per qubit | 231.8 |
 | T per rotation | 17.2 (13.5 rotations per qubit) |
 
-This point is about 2.5 times more accurate in $C$ than the SNAP point, so the two do not compare directly. Matched comparisons need the full budget ladders. The constant $\alpha/\sqrt{C} = 1.86$ is close to SNAP's.
+This point is about 2.5 times more accurate in $C$ than the SNAP point, so the two do not compare directly. The KN fallbacks raise its state infidelity bound at $N = 100$ by 12%, against 1% for the SNAP point at $F = 18$. Matched comparisons need the full budget ladders. The constant $\alpha/\sqrt{C} = 1.86$ is close to SNAP's.
 
 ## Port check, 2026-10-06
 
@@ -75,7 +79,7 @@ A longer check the same day, in the claude.ai project doc `rz_library_corrected_
 - The $2k-2$ rule holds for all 25,550 $L = 10, 11$ gadgets as well.
 - The zip carries a stale `.pyc` of the old builder, which has identical function bytecode and was dropped here.
 
-## Tests (`pytest`, 16 tests, about 1 min)
+## Tests (`pytest`, 18 tests, about 1 min)
 
 The suite checks the following:
 
@@ -87,6 +91,7 @@ The suite checks the following:
 - First-order Trotter convergence
 - Exact single-angle curves, including the staggered slot
 - Lanczos against dense arc widths
+- Exact against Haar-estimated process fidelity, and the fidelity bound
 - Affine extrapolation
 - The order-2 Trotter layout
 - KN against its README example and the cache

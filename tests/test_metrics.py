@@ -35,3 +35,24 @@ def test_trotter_circuit_order2_tally():
     tally = rotation_tally(c)
     assert all(v > 0 for v in tally.values())
     np.testing.assert_allclose(sum(a[3] for _p, a in c.layers if a[3]), 1.6 * 1.0)
+
+
+def test_process_fidelity_exact_vs_haar():
+    from snapevo.metrics import process_fidelity
+    model = XXZ(0.25, 1.6)
+    cell = CELLS["xxz+x"]
+    c = Layered.brickwork(cell, cell.trotter_angles(model, 0.5, 6))
+    ex = process_fidelity(c, model, 0.5, 8)
+    hr = process_fidelity(c, model, 0.5, 8, exact_max=6, n_haar=64)
+    assert ex["method"] == "exact" and hr["method"] == "haar64"
+    assert abs(hr["infid"] - ex["infid"]) < 4 * hr["stderr"] + 0.05 * ex["infid"]
+    # a circuit equal to the target up to Trotter error has a small, positive infidelity
+    assert 0 < ex["infid"] < 1e-2
+
+
+def test_fidelity_bound():
+    from snapevo.metrics import fidelity_bound
+    assert fidelity_bound(1e-4, 0.0, 0.0) == 1e-4
+    assert math.isclose(fidelity_bound(0.0, 2e-3, 0.0), 1e-6)
+    assert math.isclose(fidelity_bound(1e-4, 2e-3, 1e-7), (1e-2 + 1e-3) ** 2 + 1e-7)
+    assert fidelity_bound(0.9, 1.0, 0.5) == 1.0
