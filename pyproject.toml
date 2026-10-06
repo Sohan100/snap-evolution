@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snapevo"
+version = "0.1.0"
+description = "SNAP compilation of XXZ time evolution onto the corrected exact-angle library, with directly measured errors"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "jax>=0.4.20",
+    "jaxlib>=0.4.20",
+    "mpmath",
+    "pygridsynth",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
