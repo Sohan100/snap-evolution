@@ -138,51 +138,49 @@ def cmd_point(args) -> None:
 
 def cmd_baseline(args) -> None:
     from snapevo.baseline import realize_baseline, trotter_circuit
-    from snapevo.metrics import arc_width, extrapolate, held_out
+    from snapevo.metrics import measure, totals
     model, _cell, d = _ctx(args)
     circ = trotter_circuit(model, args.t, args.order, args.steps)
     sizes = tuple(int(v) for v in args.sizes.split(","))
-    out = {"model": model.to_dict(), "t": args.t, "order": args.order, "steps": args.steps,
-           "eps": args.eps, "N_target": args.N_target}
-    for label, c in (("trotter", circ), ("realized", None)):
-        if label == "realized":
-            rb = realize_baseline(circ, args.eps)
-            c = rb.pop("circuit")
-            out.update({k: v for k, v in rb.items() if k != "synth"})
-            out["synth"] = rb["synth"]
-        arcs = [arc_width(c, model, args.t, N) for N in sizes]
-        ext = extrapolate([a["N"] for a in arcs], [a["w"] for a in arcs], args.N_target)
-        out[label] = {"held_out": held_out(c, model, args.t), "arcs": arcs, "extrapolation": ext}
-        _log(f"baseline {label}: D_coh(N = {args.N_target}) = {ext['D_coh']:.3e}")
-    out["ledger"] = args.N_target * out["ledger_per_qubit"]
-    out["D_total"] = out["realized"]["extrapolation"]["D_coh"] + out["ledger"]
+    rb = realize_baseline(circ, args.eps)
+    real = rb.pop("circuit")
+    out = {"model": model.to_dict(), "t": args.t, "order": args.order, "steps": args.steps, **rb,
+           "trotter": measure(circ, model, args.t, sizes, args.N_target, log=_log),
+           "realized": measure(real, model, args.t, sizes, args.N_target, log=_log)}
+    out.update(totals(out["realized"], rb["ledger_per_qubit"], rb["ledger2_per_qubit"]))
     out["T_per_rotation"] = out["Tq"] / out["rotations_per_qubit"]
     out["T_per_qubit_per_time"] = out["Tq"] / args.t
     io.write_json(d / f"baseline_o{args.order}_r{args.steps}_e{args.eps:.0e}.json", out)
-    _log(f"baseline: T/q {out['Tq']:.1f}, T/rot {out['T_per_rotation']:.2f}, D_total(N = {args.N_target}) "
-         f"{out['D_total']:.3e} (ledger {out['ledger']:.1e})")
+    _log(f"baseline: T/q {out['Tq']:.1f}, T/rot {out['T_per_rotation']:.2f}; at N = {args.N_target}: "
+         f"D_total {out['D_total']:.3e}, state infid {out['state_infid_total']:.3e}, "
+         f"process infid {out['process_infid_total']:.3e} (ledger {out['ledger']:.1e})")
+
+
+_HEAD = (f"{'point':>9} {'D':>3} {'C held':>9} {'alpha':>9} {'D_total':>9} {'1-F st':>9} {'1-F pr':>9} "
+         f"{'F':>3} {'T/q':>7} {'T/rot':>6} {'T/q/t':>7}")
+
+
+def _row(label, D, e, F, Tq, Trot, Tqt):
+    return (f"{label:>9} {D:>3} {e['held_out']['worst']:9.2e} {e['alpha']:9.2e} {e['D_total']:9.2e} "
+            f"{e['state_infid_total']:9.2e} {e['process_infid_total']:9.2e} {F:>3} {Tq:7.1f} {Trot:6.2f} "
+            f"{Tqt:7.1f}")
 
 
 def cmd_report(args) -> None:
     model, _cell, d = _ctx(args)
-    rows = []
-    for p in sorted(d.glob("eval_*.json")):
+    print(f"{model.describe()}, t = {args.t:g}. Totals at N = {args.N_target} (fallbacks included).")
+    print("budget/order, depth, held-out C, alpha = w/N, D_total, state and process infidelity,")
+    print("fallback cost F, T per qubit, T per rotation, T per qubit per unit time")
+    print(_HEAD)
+    for p in sorted(d.glob("eval_*.json"), key=lambda p: -io.read_json(p)["budget"]):
         e = io.read_json(p)
-        rows.append((e["budget"], e["D"], e["held_out"]["worst"], e["alpha"], e["D_total"], e["D_coh"],
-                     e["ledger"], e["F"], e["Tq"], e["T_per_rotation"], e["T_per_qubit_per_time"]))
-    print(f"{model.describe()}, t = {args.t:g}, totals at N = {args.N_target}")
-    print(f"{'budget':>8} {'D':>3} {'C held':>9} {'alpha':>9} {'D_total':>9} {'D_coh':>9} {'ledger':>8} "
-          f"{'F':>3} {'T/q':>7} {'T/rot':>6} {'T/q/t':>7}")
-    for r in sorted(rows, key=lambda r: -r[0]):
-        print(f"{r[0]:8.1e} {r[1]:3d} {r[2]:9.2e} {r[3]:9.2e} {r[4]:9.2e} {r[5]:9.2e} {r[6]:8.1e} "
-              f"{r[7]:3.0f} {r[8]:7.1f} {r[9]:6.2f} {r[10]:7.1f}")
+        print(_row(f"{e['budget']:.1e}", e["D"], e, f"{e['F']:.0f}", e["Tq"], e["T_per_rotation"],
+                   e["T_per_qubit_per_time"]))
     for p in sorted(d.glob("baseline_*.json")):
         b = io.read_json(p)
-        big = max(b["realized"]["arcs"], key=lambda a: a["N"])
-        print(f"baseline order {b['order']} r {b['steps']} eps {b['eps']:.0e}: C held "
-              f"{b['realized']['held_out']['worst']:.2e}, alpha {big['w'] / big['N']:.2e}, D_total "
-              f"{b['D_total']:.2e}, T/q {b['Tq']:.1f}, T/rot {b['T_per_rotation']:.2f}, "
-              f"T/q/t {b['T_per_qubit_per_time']:.1f}")
+        e = {**b["realized"], **{k: b[k] for k in ("D_total", "state_infid_total", "process_infid_total")}}
+        print(_row(f"o{b['order']}r{b['steps']}", "", e, "", b["Tq"], b["T_per_rotation"],
+                   b["T_per_qubit_per_time"]) + f"   (KN eps {b['eps']:.0e})")
 
 
 def cmd_verify_library(args) -> None:
@@ -224,7 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     snap_opts.add_argument("--fresh", action="store_true", help="recompile even if the result exists")
 
     eval_opts = argparse.ArgumentParser(add_help=False)
-    eval_opts.add_argument("--sizes", default="6,8,10,12,14", help="ring sizes for the exact op norm")
+    eval_opts.add_argument("--sizes", default="6,8,10,12,14", help="ring sizes for the exact op norm and process fidelity")
     eval_opts.add_argument("--N-target", type=int, default=100, dest="N_target")
     eval_opts.add_argument("--ledger-frac", type=float, default=0.1, dest="ledger_frac")
 

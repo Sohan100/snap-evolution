@@ -44,12 +44,12 @@ All run files live in `runs/<model tag>/t<t>/` (`io.py`). The JSON keys are as f
 : `settings`, `floor`, `C_train`, `angles`, `snapped`, `costs_plan`, `multiplicity`, `Tq_plan`, `stragglers {i: {eps, T_plan, dC_plan}}`, `library_stragglers`, counters, `trace`, `history` (every accepted prefix), `seconds`, `model`, `cell`, `t`, `D`, `N`.
 
 `real_b<B>_D<D>.json`
-: `angles_compiled`, `angles_real`, `multiplicity`, `C_train_real`, `straggler_eps_scale`, `lattice {i: {kind, cost[F], q[F]}}`, `kn {i: synthesis record}`, `per_F {F: {Tq, ledger_per_qubit, delta_fb}}`, `rotations_per_qubit`, counts.
+: `angles_compiled`, `angles_real`, `multiplicity`, `C_train_real`, `straggler_eps_scale`, `lattice {i: {kind, cost[F], q[F]}}`, `kn {i: synthesis record}`, `per_F {F: {Tq, ledger_per_qubit, ledger2_per_qubit, delta_fb}}`, `rotations_per_qubit`, counts.
 
 `eval_b<B>_D<D>.json`
-: `held_out`, `arcs` (per $N$: $w$, $\epsilon_{\rm op}$, $D_{\rm coh}$, timing), `extrapolation`, `per_F`, the chosen `F`, and `D_total`, `D_coh`, `ledger`, `Tq`, `T_per_rotation`, `T_per_qubit_per_time`.
+: `held_out`, `arcs` (per $N$: $w$, $\epsilon_{\rm op}$, $D_{\rm coh}$, timing), `process` (per $N$: $F_e$, per-site $c_e$, method), `alpha`, `extrapolation`, `fidelity` (success branch: `C`, `c_e`, `state_infid_10`, `state_infid`, `process_infid`), `per_F`, the chosen `F`, and the totals `D_total`, `state_infid_total`, `process_infid_total`, with `ledger`, `Q2`, `D_coh`, `Tq`, `T_per_rotation`, `T_per_qubit_per_time`.
 
 `baseline_o<order>_r<steps>_e<eps>.json`
-: the Trotter-only and realized metrics, `Tq`, `ledger`, `D_total`, and every synthesis record.
+: `trotter` and `realized`, each a full measurement as in the eval file, then `Tq`, the ledgers, the same three totals, and every synthesis record.
 
 `Tq` is expected T per qubit for the whole circuit (time $t$). T per rotation divides by 2.5 Rz per qubit per sublayer times $D$.

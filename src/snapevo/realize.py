@@ -12,11 +12,11 @@ Every rotation of the compiled brickwork ends up as one of
 The realized circuit (success branch everywhere) is what metrics.py measures
 directly. The heralded branches go in the ledger: per qubit per circuit,
 
-    ledger = (1/2) sum_i m_i q_i delta_i,
+    ledger  = (1/2) sum_i m_i q_i delta_i,      ledger2 = (1/2) sum_i m_i q_i delta_i^2,
 
 with m_i the slot multiplicity and delta_i the diamond distance of the fallback
 branch from the success branch. At N sites the ledger contributes N x ledger
-to the diamond error (docs/error_metric.md).
+to the diamond error, and both enter the fidelity bound (docs/error_metric.md).
 
 The library part depends on the fallback cost F only through cost and q, so it
 is priced on a grid of F and metrics.py picks F.
@@ -82,15 +82,14 @@ def realize(compiled: dict, model: XXZ, cell: Cell, t: float, N: int = 10,
 
     per_F = {}
     for F, lib in libs.items():
-        cost = np.zeros(len(x))
-        led = np.zeros(len(x))
+        cost, q, delta = np.zeros(len(x)), np.zeros(len(x)), np.zeros(len(x))
         for i, row in lib_rows.items():
-            cost[i] = row["cost"][f"{F:g}"]
-            led[i] = row["q"][f"{F:g}"] * lib.delta_fb
+            cost[i], q[i], delta[i] = row["cost"][f"{F:g}"], row["q"][f"{F:g}"], lib.delta_fb
         for i, r in kn_rows.items():
-            cost[i] = r["expected_t"]
-            led[i] = (1.0 - r["p"]) * r["d_branch"]
-        per_F[f"{F:g}"] = {"Tq": 0.5 * float(mult @ cost), "ledger_per_qubit": 0.5 * float(mult @ led),
+            cost[i], q[i], delta[i] = r["expected_t"], 1.0 - r["p"], r["d_branch"]
+        per_F[f"{F:g}"] = {"Tq": 0.5 * float(mult @ cost),
+                           "ledger_per_qubit": 0.5 * float(mult @ (q * delta)),
+                           "ledger2_per_qubit": 0.5 * float(mult @ (q * delta ** 2)),
                            "delta_fb": lib.delta_fb}
     rot_per_q = cell.rotations_per_sublayer_per_qubit * (len(x) // cell.n_angles)
     return {
