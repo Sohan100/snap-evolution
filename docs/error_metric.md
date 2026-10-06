@@ -1,6 +1,52 @@
-# Error metrics for the unmixed method
+# Error metric for the unmixed method
 
-This note defines the errors we report for a compiled time-evolution circuit, for SNAP and for the baseline alike. It follows the decisions of the 5 Oct 2026 call. We synthesize deterministically (no mixing) and we measure errors directly by plugging in the actual Clifford+T circuits. We report two kinds of error for every point. The worst case is the operator norm and the diamond norm. The average case is the fidelity, on product states and as a process fidelity. The code is `realize.py` and `metrics.py`.
+This note defines the error we report for a compiled time-evolution circuit, for SNAP and for the baseline alike. We synthesize deterministically (no mixing), and we compute the error of the actual Clifford+T circuits at the full system size. The decisions come from the call of 5 Oct 2026 and from Sohan on 6 Oct.
+
+The reported error is the state infidelity on random product inputs at $N = 100$, computed with matrix product states on an open chain. Nothing is extrapolated from small systems. The code is `evaluate.py`, `mps.py` and `edges.py`.
+
+## The quantity
+
+For an input $|\phi\rangle = |a_1\rangle \otimes \cdots \otimes |a_N\rangle$, with every $|a_j\rangle$ a random point on the Bloch sphere, let $|u\rangle = U|\phi\rangle$ be the output of the compiled circuit and $|v\rangle = e^{-iHt}|\phi\rangle$ the exact output. We compute
+
+$$
+F_k = |\langle v_k | u_k \rangle|^2
+$$
+
+for 8 inputs and report the infidelity $1 - \bar F$, its statistical error, and the per-site value
+
+$$
+c = 1 - \overline{F_k^{1/N}} ,
+$$
+
+which is defined like the training $C$. The per-site value is just another way of writing the same number, $F \approx (1-c)^N$. Comparing $c$ at $N = 100$ with $C$ from the 10-site ring checks that the per-site error really carries over.
+
+## Why an open chain
+
+The cells are trained on a ring, but we evaluate on a 100-site open chain. The reason is entanglement. Random product states are infinite-temperature-like inputs, and their entanglement grows linearly in $t$. On a ring every half of the system has two cuts, so the bond dimension is roughly the square of the open chain's. We measured it at $N = 20$ with exact state vectors (spin units, both models behave alike):
+
+| $t$ | chain, one cut: $S$ (nats) | $\chi$ for $10^{-10}$ | ring, two cuts: $\chi$ for $10^{-10}$ |
+|---|---|---|---|
+| 2 | 0.52 | 12 | 83 |
+| 4 | 1.02 | 35 | 520 |
+| 6 | 1.82 | 87 | 977 (saturated at $N = 20$) |
+
+On a 100-site ring the two cuts are independent, so at $t = 6$ the ring needs about $87^2 \approx 7500$ and at $t = 10$ about $10^5$. The open chain needs a few hundred at $t = 10$ (`docs/validation.md` has the measured values at $N = 100$). So the ring stops at about $t = 4$, and the chain reaches $t = 10$.
+
+## Edges
+
+On the open chain, the parity-1 sublayers lose the wrap bond $(N-1, 0)$. By default we keep the wrap gate's single-qubit factor, $R_z(d) \otimes R_z(-d)$ or $R_x(e) \otimes R_x(f)$, and drop its coupling. That makes an open-chain product formula exact at the ends, and it is all model A needs. For model A at $D = 7$ and $11$ the boundary costs at most 2.4 bulk sites' worth of infidelity.
+
+The zero-field cells are different once their staggered angles are large. They lean on the wrap bond, and at $D = 11$ the open chain picks up a boundary error of $4\times10^{-4}$, against $1.1\times10^{-6}$ per site in the bulk. We fix it with edge rotations. Every lost wrap gate is replaced by a free $U = R_z(\alpha) R_y(\beta) R_z(\gamma)$ on each end site, six angles per parity-1 sublayer. We fit them with the bulk fixed, on an open chain of $N_{\rm fit}$ sites (12 to 18, growing with $t$), using exact gradients. At $D = 11$ this removes the boundary error. The open chain then has a lower infidelity than the ring at every size we tried ($N = 8$ to 16).
+
+We keep the fitted edges only when they remove at least one bulk site's worth of error at $N_{\rm fit}$. Otherwise the cell's own factor stays, at no extra cost. Kept angles are synthesized with KN non-mixed at $\min(10^{-4}, 0.1\sqrt{B})$, so their synthesis error never matters. They cost about 17 T each, and there are 6 per parity-1 sublayer in total, not per qubit. That adds about $51 D/N$ T per qubit, so about $0.5 D$ at $N = 100$.
+
+## How we compute it
+
+Both states are MPSs on the open chain (`mps.py`). A two-qubit gate on neighbours is followed by an SVD that keeps the fewest singular values whose discarded weight is at most $10^{-12}$, with at most 1024 of them, and renormalizes. The reference $e^{-iHt}$ is the order-4 Suzuki product formula with step $0.2$, run through the same code. Against exact evolution at $N = 12$, its error is below $3\times10^{-11}$ per site at $t = 10$, so below $3\times10^{-9}$ at $N = 100$.
+
+Truncation. Each MPS carries the sum of its discarded weights, $\epsilon_u$ and $\epsilon_v$. The pure-state trace distance $\sqrt{1 - F}$ moves by at most $\sqrt{\epsilon_u} + \sqrt{\epsilon_v}$, which gives every $F_k$ a rigorous error bar. A point is flagged when the bar on $1 - \bar F$ exceeds 5%. At the smoke point the bar is 0.1%.
+
+A reference depends only on the model, the time and the input, so it is cached (`runs/<model>/t<t>/ref/`) and shared by every SNAP and baseline circuit at that time. The references dominate the cost from $t = 8$ on.
 
 ## What a realized rotation is
 
@@ -8,111 +54,59 @@ Every rotation of a compiled circuit ends up as one of the following:
 
 1. **A Clifford or T angle** ($\theta \in \tfrac{\pi}{4}\mathbb{Z}$). Exact, 0 or 1 T.
 2. **A library gadget** (corrected RUS file, `docs/cost_model.md`). On success it applies $R_z(\theta)$ exactly. On failure it applies a known $R_z(\theta_f)$. If $\theta_f \in \tfrac{\pi}{4}\mathbb{Z}$ we undo it exactly and retry. Otherwise the correction is synthesized with KN at fallback cost $F$, which is approximate, with diamond error $\delta_{\rm fb}(F)$.
-3. **A straggler**, synthesized with KN non-mixed at diamond budget $\epsilon$. Its success branch (probability $p$) is exactly $R_z(\theta_s)$ with $|\theta_s - \theta| \le 0.9\,\epsilon$. Its fallback branch (probability $1-p$) is a gridsynth word $B$ times a known diagonal $F$.
+3. **A straggler**, synthesized with KN non-mixed at diamond budget $\epsilon$. Its success branch (probability $p$) is exactly $R_z(\theta_s)$ with $|\theta_s - \theta| \le 0.9\,\epsilon$. Its fallback branch (probability $1-p$) is a gridsynth word times a known diagonal.
 
-Each rotation instance $i$ therefore has a success unitary $R_i^{s}$, which is an exact $z$ rotation, and a heralded fallback unitary $R_i^{f}$ that runs with probability $q_i$ per use. For gadgets, $q_i$ is $1-p$ (single shot) or $(1-p)/p$ (repeat with a 2+T correction). The success probabilities do not depend on the input state, since $K_0^\dagger K_0 = p\,\mathbb{1}$ for every gadget. So the realized operation is a fixed channel
+The MPS runs the circuit with every rotation on its success branch. Each instance $i$ also has a heralded fallback that runs with probability $q_i$ per use ($1-p$ single shot, $(1-p)/p$ for a repeat gadget with a 2+T correction) and has diamond error $\delta_i$ relative to the success branch. The success probabilities do not depend on the input, since $K_0^\dagger K_0 = p\,\mathbb{1}$ for every gadget.
 
-$$
-\mathcal{E} = \sum_b P_b\, \mathcal{U}_b ,
-$$
+## Fallbacks
 
-a mixture over branch patterns $b$, where $\mathcal{U}_b$ is the unitary channel of the circuit with fallbacks at the rotations in $b$. Let $U_s$ be the circuit with every rotation on its success branch and $V = e^{-iHt}$. Every metric below splits into a coherent part, measured on $U_s$, and a fallback part, which is exact bookkeeping over the instances. Per qubit per circuit the bookkeeping is
-
-$$
-\ell = \tfrac12 \sum_{\text{angles } i} m_i\, q_i\, \delta_i , \qquad \ell_2 = \tfrac12 \sum_{\text{angles } i} m_i\, q_i\, \delta_i^2 ,
-$$
-
-with $m_i$ the Rz rotations the angle costs per bond and $\delta_i = \| \mathcal{R}_i^f - \mathcal{R}_i^s \|_\diamond$. For library gadgets $\delta_i = \delta_{\rm fb}(F)$ from the calibrated KN law. For KN stragglers $\delta_i$ comes from Isaac's returned unitaries. On $N$ sites, $L = N\ell$ and $Q_2 = N\ell_2/2$.
-
-## Worst case: operator norm and diamond
-
-For a pattern $b$ with fallbacks at the set $F_b$, unitary invariance and the triangle inequality give $\| \mathcal{U}_b - \mathcal{U}_s \|_\diamond \le \sum_{i \in F_b} \delta_i$. Averaging over patterns,
-
-$$
-\| \mathcal{E} - \mathcal{V} \|_\diamond  \le  \underbrace{\| \mathcal{U}_s - \mathcal{V} \|_\diamond}_{D_{\rm coh}(N)}  +  L  =  D_{\rm total}(N).
-$$
-
-We use the full diamond norm, with values in $[0, 2]$. For any observable, $|\mathrm{tr}\,O(\mathcal{E}(\rho) - \mathcal{V}(\rho))| \le \|O\|\, D_{\rm total}$.
-
-Let the eigenphases of $V^\dagger U_s$ span an arc of width $w$ once the global phase is removed. Then
-
-$$
-\epsilon_{\rm op} = \min_\phi \| U_s - e^{i\phi} V \| = 2 \sin\frac{w}{4}, \qquad
-D_{\rm coh} = \| \mathcal{U}_s - \mathcal{V} \|_\diamond = 2 \sin\frac{w}{2} \quad (w < \pi).
-$$
-
-We compute $w$ exactly with Lanczos on $G = \mathrm{Im}(e^{-i\phi_0} V^\dagger U_s)$. Its extreme eigenvalues are the sines of the arc ends, and every matrix-vector product is one circuit application plus one Krylov exponential. This runs at $N = 6, 8, \dots, 16$ routinely and at 18 for selected points. A test checks it against full diagonalization at $N \le 8$.
-
-We need $N = 100$, so we extrapolate $w$, not $D$. If $V^\dagger U_s \approx e^{-iK}$ with $K = \sum_j k_j$ a sum of local error terms, then $w = \lambda_{\max}(K) - \lambda_{\min}(K)$ grows linearly with $N$. $D_{\rm coh} = 2\sin(w/2)$ then saturates at 2, which is the right behavior for a fixed error per site on a large ring. We fit the three largest sizes two ways, affine $w = \alpha N + \beta$ and power law $w = c N^{a}$, and report the larger prediction at $N = 100$. Both fits are stored. We also report $\alpha = w/N$ at the largest measured size, which does not depend on $N$.
-
-## Average case: fidelity
-
-We measure two fidelities of the success branch.
-
-1. **State infidelity on product inputs.** For random product states $|\phi_k\rangle$ and exact outputs $|\psi_k\rangle$, the per-site infidelity is $C = 1 - \frac1n\sum_k |\langle\psi_k|U_s|\phi_k\rangle|^{2/N}$, measured on the four held-out sets at $N = 10, 12$ (worst of the 8). The whole-ring infidelity is
-$$
-1 - F_s(N) = 1 - (1 - C)^N .
-$$
-At $N = 10$ this is the Sep 2026 "whole-circuit infidelity". We report it there for continuity, and at $N = 100$.
-2. **Process infidelity.** This is the entanglement fidelity, the fidelity on one half of a maximally entangled state,
-$$
-F_e(N) = \left| \tfrac1d \mathrm{tr}\, V^\dagger U_s \right|^2, \qquad d = 2^N ,
-$$
-and the average gate fidelity $\bar F = (d F_e + 1)/(d+1)$ follows from it. We compute it exactly for $N \le 10$. Above that we use 16 Haar-random states, whose mean fidelity estimates $\bar F$. The estimator agrees with the exact value to within 0.6% at $N = 8$ and 12. The per-site value $c_e = 1 - F_e^{1/N}$ is flat in $N$, so the whole-ring value is $1 - (1 - c_e)^N$.
-
-Both per-site numbers stop depending on $N$ once the ring is longer than the light cone. The error is a sum of local terms, so the log of either fidelity adds over distant regions. The smoke data show it, with $c_e$ flat from $N = 6$ to 14. This is why $C$ from $N = 10, 12$ carries over to $N = 100$ with no fit.
-
-### Fallbacks in the fidelity
-
-Fidelity is linear in the channel, $F(\mathcal{E}) = \sum_b P_b F_b$, so a fallback cannot be absorbed into the success branch the way mixing would require. It has to be bounded. The trace distance between pure states, $\sqrt{1 - |\langle a|b\rangle|^2}$, is a metric. A fallback at instance $i$ moves the output by at most $\delta_i/2$ in that distance. So for every pattern $\sqrt{1 - F_b} \le \sqrt{1 - F_s} + X_b$ with $X_b = \sum_{i\in F_b} \delta_i/2$, where an instance counts once per fallback it runs. The fallbacks of different instances are independent, so $\mathbb{E}X = L/2$ and $\mathrm{Var}\,X = \sum_i (\delta_i/2)^2\, \mathrm{Var}\, n_i$, with $n_i$ the number of fallbacks at instance $i$. A repeat gadget runs a geometric number of them, with variance $q_i(1 + q_i)$, and a single-shot gadget or a KN straggler runs at most one, with variance $q_i(1 - q_i)$. Every library gadget has $p \ge 0.9$, so $q_i \le 1$ and $\mathrm{Var}\,n_i \le 2q_i$ in all cases. That gives $\mathbb{E}X^2 \le (L/2)^2 + Q_2$, and averaging gives
+Fidelity is linear in the channel, so a fallback cannot be absorbed into the success branch. We bound it. With $L = \sum_i q_i \delta_i$ and $Q_2 = \tfrac12 \sum_i q_i \delta_i^2$ over all instances (bulk and edges),
 
 $$
 1 - F(\mathcal{E}) \le \left( \sqrt{1 - F_s} + \frac{L}{2} \right)^2 + Q_2 .
 $$
 
-This holds for every input state. Averaging over inputs with Jensen's inequality keeps the same form with the mean infidelity, and the same argument with a maximally entangled input gives the process version. `metrics.fidelity_bound` implements it.
+The proof is short. The pure-state trace distance $\sqrt{1 - F}$ is a metric, and a fallback at instance $i$ moves the output by at most $\delta_i/2$ in it. So for a branch pattern $b$, $\sqrt{1 - F_b} \le \sqrt{1 - F_s} + X_b$, with $X_b$ the sum of $\delta_i/2$ over the fallbacks it runs. The fallbacks of different instances are independent, $\mathbb{E}X = L/2$, and $\mathrm{Var}\,X \le Q_2$ because every library gadget has $p \ge 0.9$, so the variance of a fallback count is at most $2q_i$. Averaging over patterns gives the bound, and Jensen's inequality carries it to the mean over inputs.
 
-## What the smoke run shows
+The library is priced on $F \in \{18, 20, \dots, 30\}$. We keep the smallest $F$ at which the fallbacks are at most 10% of the total. A larger $F$ costs about $(1-p)\,\Delta F$ more T per gadget, a few tenths of a T. The term is worst case, since it lets every fallback line up with the coherent error. It is 1% of the total for SNAP at $F = 18$ and about 10% for the KN baseline, whose fallbacks get a tenth of $\epsilon$.
 
-The smoke run used model B, $t = 2$, $D = 7$, held-out $C = 1.02\times10^{-4}$. The results are as follows:
+## Steps for one point
 
-- $\alpha = w/N$ is flat from $N = 8$ on, at $0.0200, 0.0192, 0.0202, 0.0198$ for $N = 8, 10, 12, 14$, and $\alpha \approx 1.95\sqrt{C}$.
-- The per-site process infidelity is $c_e = 1.04\times10^{-4}$ at $N = 6$ to $14$, the same as $C$ to within 2%.
-- At $N = 100$ with $F = 18$, we get $D_{\rm total} = 1.86$, state infidelity $1.03\times10^{-2}$ and process infidelity $1.05\times10^{-2}$.
+We run the steps as follows:
 
-So the same circuit is a 1% error on 100 sites by fidelity, and useless by operator norm. The two scale as
+1. **Compile.** The compiler works on the training $C$ at $N = 10$ on the ring, over 12 random product states. The budget $B$ on $C$ is a knob. It is not the reported error.
+2. **Realize.** We synthesize the stragglers with KN at the precision the compiler allotted, check $C \le B$ on the training set (halving every straggler $\epsilon$ if not), then fit and synthesize the edges.
+3. **Evaluate.** MPS at $N = 100$ on 8 inputs, the fallback bound, the choice of $F$.
+4. **Report.** Each point carries $1 - \bar F$ at $N = 100$ with and without fallbacks, its statistical and truncation error bars, $c$, the ring $C$ for comparison, and T per qubit, T per rotation and T per qubit per unit time. `snapevo report` prints them side by side.
+
+The baseline is a product formula (order 2 or 4, $r$ steps) with every non-Clifford rotation synthesized by KN non-mixed at budget $\epsilon$ (`baseline.py`). Every distinct angle is synthesized once and every copy uses the same circuit, so the synthesis errors add coherently, which the direct computation captures. `baseline-scan` screens $(\text{order}, r, \epsilon)$ by ring $C$ at $N = 10$ and runs the MPS evaluation only on the Pareto front.
+
+## Checks on every point
+
+1. The realized training $C$ is at most the budget.
+2. The statistical error on $1 - \bar F$ is below 5%, and the truncation bar is below 5%.
+3. $c$ at $N = 100$ is within 10% of the ring's held-out $C$. A larger gap means a boundary problem.
+4. At the chosen $F$ the fallbacks are at most 10% of the total infidelity.
+
+## Small-ring cross-checks
+
+Before the MPS runs we measured the success branch on small rings and extrapolated to $N = 100$. That code is now `crosscheck.py` (`snapevo crosscheck`), kept as a check at short times. It computes three numbers:
+
+1. **Operator norm and diamond norm.** If the eigenphases of $V^\dagger U_s$ span an arc of width $w$, then $\epsilon_{\rm op} = 2\sin(w/4)$ and $D_{\rm coh} = 2\sin(w/2)$. Lanczos gives $w$ exactly for $N \le 16$, and we extrapolate it to $N = 100$.
+2. **State infidelity** $1 - (1 - C)^N$ from the held-out $C$.
+3. **Process infidelity** $1 - |\mathrm{tr}(V^\dagger U_s)/d|^2$, exact up to $N = 10$ and from 16 Haar states above.
+
+At the smoke point (model B, $t = 2$, $D = 7$) these give $D_{\rm total}(100) = 1.86$, state infidelity $1.03\times10^{-2}$ and process infidelity $1.05\times10^{-2}$ on the ring. The MPS gives $9.73\times10^{-3}$ on the open chain. The worst-case and average-case numbers scale as
 
 $$
 1 - F(N) \approx N C, \qquad D_{\rm coh}(N) \approx 2 \sin\!\left(N\sqrt{C}\right),
 $$
 
-which is the square-root relation mentioned at the meeting, now with its constant. At $N = 100$, $D_{\rm coh} \le 0.1$ needs $C \lesssim 2.5\times10^{-7}$, and $D_{\rm coh} \le 0.01$ needs $C \lesssim 2.5\times10^{-9}$. A fidelity of 99% at $N = 100$ needs only $C \approx 10^{-4}$, and 99.99% needs $C \approx 10^{-6}$.
-
-## How the budget is spent
-
-We use the steps as follows:
-
-1. **Compile.** The compiler works on the training $C$ at $N = 10$, over 12 random product states. The budget $B$ on $C$ is a knob. It is not the reported error.
-2. **Realize.** We synthesize the stragglers with KN at the precision the compiler allotted. The success-branch circuit then has to satisfy $C \le B$ on the training set. If it does not, every straggler $\epsilon$ is halved and the stragglers are synthesized again.
-3. **Measure.** We compute held-out $C$ at $N = 10, 12$, and $w(N)$ and $F_e(N)$ for $N = 6$ to $16$, and take both to $N = 100$.
-4. **Pick $F$.** The library prices are recomputed on $F \in \{18, 20, \dots, 30\}$. We keep the smallest $F$ at which the fallbacks are at most a tenth of the total, both in $D_{\rm total}(100)$ and in the state infidelity at $N = 100$. A larger $F$ costs about $(1-p)\,\Delta F$ more T per gadget, a few tenths of a T.
-5. **Report.** Each point carries $\alpha$, $D_{\rm total}(100)$, the state and process infidelities at $N = 100$ (and the state infidelity at $N = 10$), held-out $C$, and T per rotation and per qubit per unit time. `snapevo report` prints them side by side.
-
-## The baseline is measured the same way
-
-The baseline is a product formula (order 1, 2 or 4, $r$ steps) with every non-Clifford rotation synthesized by KN non-mixed at budget $\epsilon$ (`baseline.py`). Every distinct angle is synthesized once, and every copy uses the same circuit. That is what deterministic synthesis means in a translation-invariant circuit, and it makes the synthesis errors add coherently over sites and steps. The Sep 2026 comparison assumed incoherent addition, with per-rotation precision $\sqrt{\epsilon/R}$, which flatters the baseline. Direct measurement removes that assumption for both methods, in both metrics. The baseline curve is the lower envelope over $(\text{order}, r, \epsilon)$ of measured points, one envelope per metric. The calibrated KN law is used only to choose which points to measure.
-
-## Checks on every point
-
-1. The realized training $C$ is at most the budget.
-2. The held-out sets agree to within 5%, and $C$ at $N = 12$ is within 3% of $N = 10$ (as in Sep 2026).
-3. The affine and power-law predictions of $w(100)$ agree to within a factor of 2. Otherwise we add $N = 18$ before quoting the point.
-4. The per-site process infidelity $c_e$ agrees across the measured sizes to within 5%, and the Haar estimate has a standard error below 2% of the infidelity.
-5. At the chosen $F$ the fallbacks are at most 10% of $D_{\rm total}(100)$ and of the state infidelity at $N = 100$.
+so a 1% error at $N = 100$ needs $C \approx 10^{-4}$ in fidelity but $C \approx 2.5\times10^{-9}$ in operator norm.
 
 ## Open points for the team
 
-1. **Which metric is the headline?** The candidates are $D_{\rm total}(100)$ (or $\alpha$), the state infidelity at $N = 100$, and the process infidelity at $N = 100$. The smoke run shows they rank the same circuit very differently. For DSF we need local two-point functions. By Lieb-Robinson their error depends only on the gates in the light cone, so it does not grow with $N$, and it should track the fidelity numbers rather than $D_{\rm total}(100)$. The end-to-end DSF run with David can settle this.
-2. **Which accuracy range matters?** The meeting argued that about 1% error is enough for DSF on NISQ hardware, and that a 1% total budget at $N = 100$ leaves 10 to 20% of the rotations Clifford. In fidelity, 1% at $N = 100$ is $C \approx 10^{-4}$, the loose end of our local range. In operator norm it is $C \approx 2.5\times10^{-9}$, at the edge of what the zero-field cells reach at $t = 2$ (floor about $2\times10^{-9}$ at $D = 27$) and where the Sep runs hit the wall.
-3. **Mixed synthesis.** We leave it out of the comparison and note it in the text as a further factor of about 2 in operator norm. It cannot help the fidelity, which is linear in the channel (Isaac, 1 Oct). If it comes back, the dephasing part enters the ledger as $\tfrac12|\Delta_1 \Delta_2|$ per rotation.
-4. **How loose is the fallback term in the fidelity?** The cross term $\sqrt{1 - F_s}\,L$ assumes every fallback error lines up with the coherent error. For SNAP at $F = 18$ the whole fallback term is 1% of the bound, so it does not matter. For the KN baseline it is about 10%, because KN gives its fallbacks a tenth of $\epsilon$ in diamond norm and the cross term turns that into a linear term. A Monte Carlo over branch patterns at $N \le 12$, with the branch unitaries KN returns, would give the actual value.
+1. **David's Hamiltonian and geometry.** The open chain matches what an MPS code for the dynamical structure factor normally uses. If the end-to-end run needs a ring after all, $t$ stops at about 4 for random product inputs.
+2. **Mixed synthesis.** We leave it out and note it in the text as a further factor of about 2 in operator norm. It cannot help the fidelity, which is linear in the channel (Isaac, 1 Oct).
+3. **How loose is the fallback term?** Sampling the gadget outcomes in the MPS runs would replace the bound by the actual average. It matters only for the baseline, where the fallbacks are about 10% of the bound.
+4. **Cheaper edges.** The edge angles go to KN at about 17 T each. Snapping them to the library would cut that by about 4x.

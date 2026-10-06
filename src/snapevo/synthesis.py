@@ -103,7 +103,10 @@ def synthesize(theta: float, eps: float, use_cache: bool = True) -> dict:
             cache = io.read_json(path) if path.exists() else {}
         if key in cache:
             return _unwrap(cache[key], theta)
-    r = _module().synthesize(math.remainder(theta, 2 * math.pi), eps)
+    # Isaac's synthesize() prices at theta and rebuilds at theta % 2 pi; for some negative
+    # angles the two disagree and its own check fails (e.g. -0.4429453 at 1e-4). Passing
+    # theta in [0, 2 pi) makes both the same angle; theta_s is unwrapped below.
+    r = _module().synthesize(theta % (2 * math.pi), eps)
     U0 = np.array([[complex(*z) for z in row] for row in r["unitaries"]["U0"]])
     theta_s = cmath.phase(U0[1, 1]) - cmath.phase(U0[0, 0])
     if r["unitaries"]["U1"] is not None:

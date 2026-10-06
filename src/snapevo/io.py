@@ -5,9 +5,11 @@ Everything a run produces goes under ``runs/<model tag>/t<t>/`` (gitignored):
     cells.json                       trained depth ladder (train.py)
     snap_b<budget>_D<D>.json         compiled circuit (snap.py)
     snap_b<budget>_D<D>.ckpt.pkl     checkpoint while compiling, deleted at the end
-    real_b<budget>_D<D>.json         realized circuit, every rotation priced (realize.py)
-    eval_b<budget>_D<D>.json         error metrics of the realized circuit (metrics.py)
-    baseline_o<order>_r<steps>_e<eps>.json   Trotter + KN baseline points (baseline.py)
+    real_b<budget>_D<D>.json         realized circuit, every rotation priced, edges (realize.py, edges.py)
+    eval_b<budget>_D<D>.json         MPS infidelity at N = 100 and T counts (evaluate.py)
+    xcheck_b<budget>_D<D>.json       small-ring cross-checks (crosscheck.py)
+    baseline_o<order>_r<steps>_e<eps>.json   Trotter + KN baseline points (baseline.py, evaluate.py)
+    ref/ref_N<N>_s<seed>_k<k>_*.npz  cached MPS of e^{-iHt} on each input (mps.py)
 
 Set ``SNAPEVO_RUNS`` to put runs somewhere else (for example off OneDrive).
 """

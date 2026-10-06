@@ -4,8 +4,8 @@ Each depth starts from three points and keeps the best after L-BFGS-B:
 the first-order Trotter angles, the previous depth padded with identity
 sublayers ("warm", which wins at depth), and the Trotter angles plus 0.1 rad
 noise. Training uses 12 product states (seed 0) at N = 10; the recorded
-``C_val`` uses 32 more (seed 999). Held-out numbers for papers come from
-metrics.py, never from here.
+``C_val`` uses 32 more (seed 999). Held-out C comes from circuits.held_out
+and the reported error from evaluate.py, never from here.
 """
 
 from __future__ import annotations

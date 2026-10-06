@@ -1,6 +1,8 @@
-"""Error metrics of a realized circuit (docs/error_metric.md has the definitions).
+"""Cross-checks on small rings (docs/error_metric.md, last section).
 
-Two kinds of error are measured on the success-branch unitary U at ring size N,
+The reported error is the MPS infidelity at N = 100 (evaluate.py). This module
+keeps the small-ring numbers we used before it, as checks at short times. Two
+kinds of error are measured on the success-branch unitary U at ring size N,
 against V = e^{-iHt}.
 
 Worst case. If the eigenphases of W = V^dag U span an arc of width w (after
@@ -34,24 +36,12 @@ import numpy as np
 import scipy.sparse.linalg as spla
 
 from snapevo.cells import Cell
-from snapevo.circuits import HELD_OUT_SETS, Layered, local_infidelity, state_pairs
+from snapevo.circuits import Layered, held_out
+from snapevo.evaluate import fidelity_bound
 from snapevo.hamiltonian import XXZ, evolve
 
-__all__ = ["held_out", "arc_width", "arc_width_dense", "process_fidelity", "extrapolate",
-           "fidelity_bound", "measure", "totals", "evaluate"]
-
-
-def held_out(circuit: Layered, model: XXZ, t: float, sizes=(10, 12)) -> dict:
-    """C on the four held-out sets at each size, and the worst value."""
-    out = {}
-    for N in sizes:
-        vals = []
-        for seed, n in HELD_OUT_SETS:
-            tin, tg = state_pairs(model, N, t, n, seed)
-            vals.append(local_infidelity(circuit.apply(tin, N), tg, N))
-        out[str(N)] = vals
-    out["worst"] = max(max(v) for v in out.values())
-    return out
+__all__ = ["arc_width", "arc_width_dense", "process_fidelity", "extrapolate", "measure", "totals",
+           "crosscheck"]
 
 
 def arc_width_dense(circuit: Layered, model: XXZ, t: float, N: int) -> float:
@@ -149,18 +139,6 @@ def extrapolate(Ns, ws, N_target: int, n_fit: int = 3) -> dict:
             "eps_op": 2 * math.sin(min(w, 2 * math.pi) / 4), "D_coh": 2 * math.sin(min(w, math.pi) / 2)}
 
 
-def fidelity_bound(infid_success: float, L: float, Q2: float) -> float:
-    """Infidelity of the realized channel given the success-branch infidelity.
-
-    L = sum_i q_i delta_i is the ledger and Q2 = sum_i q_i delta_i^2 / 2. Each
-    fallback moves the output by at most delta_i/2 in trace distance, so for
-    every branch pattern sqrt(1 - F_b) <= sqrt(1 - F_s) + X_b with X_b the sum of
-    its delta_i/2, and averaging (1 - F) <= E(sqrt(1 - F_s) + X)^2 gives this.
-    Var X <= Q2 needs q_i <= 1, which holds since every library gadget has p >= 0.9.
-    """
-    return min(1.0, (math.sqrt(max(infid_success, 0.0)) + L / 2) ** 2 + Q2)
-
-
 def measure(circuit: Layered, model: XXZ, t: float, sizes=(6, 8, 10, 12, 14), N_target: int = 100,
             held_sizes=(10, 12), log=print) -> dict:
     """Success-branch metrics of one circuit: worst case, fidelities, and their N = N_target values."""
@@ -197,9 +175,9 @@ def totals(meas: dict, ledger_per_qubit: float, ledger2_per_qubit: float) -> dic
             "process_infid_total": fidelity_bound(f["process_infid"], L, Q2)}
 
 
-def evaluate(realized: dict, model: XXZ, cell: Cell, t: float, sizes=(6, 8, 10, 12, 14),
-             N_target: int = 100, ledger_frac: float = 0.1, held_sizes=(10, 12), log=print) -> dict:
-    """Every metric of a realized circuit, and the fallback cost F it should be priced at.
+def crosscheck(realized: dict, model: XXZ, cell: Cell, t: float, sizes=(6, 8, 10, 12, 14),
+               N_target: int = 100, ledger_frac: float = 0.1, held_sizes=(10, 12), log=print) -> dict:
+    """Every small-ring metric of a realized circuit, and the F it would pick.
 
     F is the smallest grid value at which the fallbacks are at most
     ``ledger_frac`` of the total, both in diamond norm and in state infidelity.
@@ -222,7 +200,7 @@ def evaluate(realized: dict, model: XXZ, cell: Cell, t: float, sizes=(6, 8, 10, 
     out = {**meas, "per_F": rows, "F": float(choice), **{k: best[k] for k in best},
            "D_coh": meas["extrapolation"]["D_coh"],
            "T_per_rotation": best["Tq"] / rot, "T_per_qubit_per_time": best["Tq"] / t}
-    log(f"evaluate: N = {N_target}, F = {choice}: D_total {best['D_total']:.3e} (ledger {best['ledger']:.1e}), "
+    log(f"crosscheck: N = {N_target}, F = {choice}: D_total {best['D_total']:.3e} (ledger {best['ledger']:.1e}), "
         f"state infid {best['state_infid_total']:.3e}, process infid {best['process_infid_total']:.3e}; "
         f"T/q {best['Tq']:.1f}, T/rot {out['T_per_rotation']:.2f}")
     return out

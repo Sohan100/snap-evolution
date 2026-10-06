@@ -6,7 +6,7 @@ from snapevo.baseline import rotation_tally, trotter_circuit
 from snapevo.cells import CELLS
 from snapevo.circuits import Layered
 from snapevo.hamiltonian import XXZ
-from snapevo.metrics import arc_width, arc_width_dense, extrapolate
+from snapevo.crosscheck import arc_width, arc_width_dense, extrapolate
 
 
 def test_lanczos_matches_dense():
@@ -38,7 +38,7 @@ def test_trotter_circuit_order2_tally():
 
 
 def test_process_fidelity_exact_vs_haar():
-    from snapevo.metrics import process_fidelity
+    from snapevo.crosscheck import process_fidelity
     model = XXZ(0.25, 1.6)
     cell = CELLS["xxz+x"]
     c = Layered.brickwork(cell, cell.trotter_angles(model, 0.5, 6))
@@ -51,7 +51,7 @@ def test_process_fidelity_exact_vs_haar():
 
 
 def test_fidelity_bound():
-    from snapevo.metrics import fidelity_bound
+    from snapevo.evaluate import fidelity_bound
     assert fidelity_bound(1e-4, 0.0, 0.0) == 1e-4
     assert math.isclose(fidelity_bound(0.0, 2e-3, 0.0), 1e-6)
     assert math.isclose(fidelity_bound(1e-4, 2e-3, 1e-7), (1e-2 + 1e-3) ** 2 + 1e-7)

@@ -35,14 +35,16 @@ Each priced row contributes $\pm\theta + k\pi/4$ for $k = 0, \dots, 7$, with one
 1. The file does not store the $\omega$ exponent $n$ of the dressed unitary $V' = \frac{1}{\sqrt2^{L}}\begin{pmatrix} z & -\omega^n y^* \\ y & \omega^n z^* \end{pmatrix}$. Same-angle rows have $n = 0$ and odd-shift rows $n = 1$. Isaac's Oct 1 `certify_rus` fixes $n = 0$ and therefore rejects every odd-shift row.
 2. The gadget circuit (CNOT, $V'$, CNOT, measure the ancilla, outcome 0) applies $R_z(-\theta)$ with $\theta$ = `angle_rad`. The sign does not matter for the library, since $R_z(-\theta) = X R_z(\theta) X$.
 
-## KN non-mixed synthesis (stragglers, baseline, fallback corrections)
+## KN non-mixed synthesis (stragglers, edges, baseline, fallback corrections)
 
 `third_party/kliuchnikov_nonmixed_2026-10-05` is Isaac's implementation of the fallback protocol of Kliuchnikov, Lauter, Minko, Paetznick and Petit (arXiv:2203.10064), non-mixed. For a target $R_z(\theta)$ and a diamond budget $\epsilon$ it builds the following:
 
 - A projective rotation (CNOT, $V$, CNOT, measure) whose success branch, with probability $p \ge 0.9$, is exactly $R_z(\theta_s)$ with $D(R_z(\theta_s), R_z(\theta)) \le 0.9\,\epsilon$.
 - A fallback, applied only on failure, $U_1 = B F$ with $B$ a gridsynth word and $D(U_1, R_z(\theta)) \le 0.1\,\epsilon/(1-p)$.
 
-The expected T count is $T(V) + (1-p) T(B)$. `synthesis.synthesize` calls it, caches the result in `runs/kn_cache.json`, and returns $\theta_s$ and $D(U_1, U_0)$. Calls take a few seconds each.
+The expected T count is $T(V) + (1-p) T(B)$. `synthesis.synthesize` calls it, caches the result in `runs/kn_cache.json`, and returns $\theta_s$ and $D(U_1, U_0)$. Calls take 2 to 5 s each.
+
+We always pass the angle in $[0, 2\pi)$. The package prices at the angle it is given but rebuilds the circuit at that angle mod $2\pi$, and for some negative angles the two searches pick different words and its own consistency check fails (for example $-0.4429453$ at $10^{-4}$). In $[0, 2\pi)$ both are the same angle. $\theta_s$ is then put back on the caller's branch.
 
 The package's calibration, at 40 random angles per $\epsilon$ and $q = 0.99$, gives a mean cost of
 
@@ -50,7 +52,7 @@ $$
 \bar T(\epsilon) = 1.096 \log_2(1/\epsilon) + 4.44 ,
 $$
 
-against $1.03 \log_2(1/\epsilon) + 5.75$ in the paper's Table 1. We use the calibrated law in three places: to plan straggler precision inside the compiler, to set $\delta_{\rm fb}(F) = 2^{-(F - 4.44)/1.096}$ (for example $1.9\times10^{-4}$ at $F = 18$ and $1.5\times10^{-5}$ at $F = 22$), and to choose which baseline points to measure. Every reported straggler and baseline cost comes from an actual circuit.
+against $1.03 \log_2(1/\epsilon) + 5.75$ in the paper's Table 1. We use the calibrated law in two places: to plan straggler precision inside the compiler, and to set $\delta_{\rm fb}(F) = 2^{-(F - 4.44)/1.096}$ (for example $1.9\times10^{-4}$ at $F = 18$ and $1.5\times10^{-5}$ at $F = 22$). Every reported straggler, edge and baseline cost comes from an actual circuit.
 
 ## What is not in the model
 

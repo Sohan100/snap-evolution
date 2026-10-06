@@ -40,7 +40,6 @@ _X = np.array([[0, 1], [1, 0]], dtype=complex)
 _Y = np.array([[0, -1j], [1j, 0]], dtype=complex)
 _Z = np.array([[1, 0], [0, -1]], dtype=complex)
 _XX, _YY, _ZZ = np.kron(_X, _X), np.kron(_Y, _Y), np.kron(_Z, _Z)
-_STAG = np.array([0.0, 1.0, -1.0, 0.0])        # (Z x 1 - 1 x Z)/2 on |00>,|01>,|10>,|11>
 
 
 def _rot(a: float, P: np.ndarray, Id: np.ndarray) -> np.ndarray:
@@ -72,12 +71,24 @@ class Cell:
         """Rz rotations per qubit per sublayer (each angle runs on N/2 bonds)."""
         return 0.5 * sum(self.multiplicity)
 
-    def gate(self, angles) -> np.ndarray:
-        a, b, c, *rest = (float(v) for v in angles)
-        U = _rot(a, _XX, _I4) @ _rot(b, _YY, _I4) @ _rot(c, _ZZ, _I4)
+    def two_qubit_part(self, angles) -> np.ndarray:
+        """exp[-i (a XX + b YY + c ZZ)/2], the part of the gate that couples the two qubits."""
+        a, b, c = (float(v) for v in angles[:3])
+        return _rot(a, _XX, _I4) @ _rot(b, _YY, _I4) @ _rot(c, _ZZ, _I4)
+
+    def one_qubit_factor(self, angles) -> tuple[np.ndarray, np.ndarray]:
+        """The single-qubit rotations (first qubit, second qubit) that act before the coupling.
+
+        ``xxz+stag``: Rz(d) and Rz(-d). ``xxz+x``: Rx(e) and Rx(f).
+        """
         if self.name == "xxz+stag":
-            return U @ np.diag(np.exp(-1j * rest[0] * _STAG))
-        return U @ np.kron(_rot(rest[0], _X, _I2), _rot(rest[1], _X, _I2))
+            d = float(angles[3])
+            return _rot(d, _Z, _I2), _rot(-d, _Z, _I2)
+        return _rot(float(angles[3]), _X, _I2), _rot(float(angles[4]), _X, _I2)
+
+    def gate(self, angles) -> np.ndarray:
+        g1, g2 = self.one_qubit_factor(angles)
+        return self.two_qubit_part(angles) @ np.kron(g1, g2)
 
     def jax_gate(self, angles):
         """The same gate as a traced jax array (angles: a length-n_angles jax vector)."""
