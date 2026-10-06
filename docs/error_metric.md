@@ -44,7 +44,7 @@ We keep the fitted edges only when they remove at least one bulk site's worth of
 
 Both states are MPSs on the open chain (`mps.py`). A two-qubit gate on neighbours is followed by an SVD that keeps the fewest singular values whose discarded weight is at most $10^{-12}$, with at most 1024 of them, and renormalizes. The reference $e^{-iHt}$ is the order-4 Suzuki product formula with step $0.2$, run through the same code. Against exact evolution at $N = 12$, its error is below $3\times10^{-11}$ per site at $t = 10$, so below $3\times10^{-9}$ at $N = 100$.
 
-Truncation. Each MPS carries the sum of its discarded weights, $\epsilon_u$ and $\epsilon_v$. The pure-state trace distance $\sqrt{1 - F}$ moves by at most $\sqrt{\epsilon_u} + \sqrt{\epsilon_v}$, which gives every $F_k$ a rigorous error bar. A point is flagged when the bar on $1 - \bar F$ exceeds 5%. At the smoke point the bar is 0.1%.
+Truncation. Each MPS carries the sum of its discarded weights, $\epsilon_u$ and $\epsilon_v$. The usual TEBD estimate puts each state at a trace distance of about $\sqrt{\epsilon}$ from its untruncated version. If both errors lined up with the circuit's own error, $\sqrt{1 - F}$ would move by $\sqrt{\epsilon_u} + \sqrt{\epsilon_v}$. We report that pessimistic bar, and we also redo input 0 at a cutoff 100 times smaller and report how much its infidelity changes. The second number is the real test. A point is flagged when either is above 5%. At the smoke point the bar is 0.1% and the change is below $10^{-4}$.
 
 A reference depends only on the model, the time and the input, so it is cached (`runs/<model>/t<t>/ref/`) and shared by every SNAP and baseline circuit at that time. The references dominate the cost from $t = 8$ on.
 
@@ -68,7 +68,9 @@ $$
 
 The proof is short. The pure-state trace distance $\sqrt{1 - F}$ is a metric, and a fallback at instance $i$ moves the output by at most $\delta_i/2$ in it. So for a branch pattern $b$, $\sqrt{1 - F_b} \le \sqrt{1 - F_s} + X_b$, with $X_b$ the sum of $\delta_i/2$ over the fallbacks it runs. The fallbacks of different instances are independent, $\mathbb{E}X = L/2$, and $\mathrm{Var}\,X \le Q_2$ because every library gadget has $p \ge 0.9$, so the variance of a fallback count is at most $2q_i$. Averaging over patterns gives the bound, and Jensen's inequality carries it to the mean over inputs.
 
-The library is priced on $F \in \{18, 20, \dots, 30\}$. We keep the smallest $F$ at which the fallbacks are at most 10% of the total. A larger $F$ costs about $(1-p)\,\Delta F$ more T per gadget, a few tenths of a T. The term is worst case, since it lets every fallback line up with the coherent error. It is 1% of the total for SNAP at $F = 18$ and about 10% for the KN baseline, whose fallbacks get a tenth of $\epsilon$.
+The library is priced on $F \in \{18, 20, \dots, 30\}$. A larger $F$ only shrinks the library's part of $L$, and costs about $(1-p)\,\Delta F$ more T per gadget, a few tenths of a T. We keep the smallest $F$ whose total is within 1% of the total at $F = 30$. What remains comes mostly from the KN stragglers, and we report it as the fallback share of the total.
+
+The term is worst case, since it lets every fallback line up with the coherent error. It is linear in $L$ while the coherent infidelity is quadratic in the errors, so its share grows at tight budgets. It is 1% at the smoke point, 13% for model A at $t = 1$ and $B = 10^{-6}$, and about 10% for the KN baseline, whose fallbacks get a tenth of $\epsilon$.
 
 ## Steps for one point
 
@@ -84,9 +86,9 @@ The baseline is a product formula (order 2 or 4, $r$ steps) with every non-Cliff
 ## Checks on every point
 
 1. The realized training $C$ is at most the budget.
-2. The statistical error on $1 - \bar F$ is below 5%, and the truncation bar is below 5%.
+2. The statistical error on $1 - \bar F$ is below 5%, and so are the truncation bar and the change at a 100 times smaller cutoff.
 3. $c$ at $N = 100$ is within 10% of the ring's held-out $C$. A larger gap means a boundary problem.
-4. At the chosen $F$ the fallbacks are at most 10% of the total infidelity.
+4. The fallback share is at most 10%. Above that, the bound rather than the circuit sets the reported number, and sampling the fallbacks (open point 3) is worth doing.
 
 ## Small-ring cross-checks
 
@@ -108,5 +110,5 @@ so a 1% error at $N = 100$ needs $C \approx 10^{-4}$ in fidelity but $C \approx 
 
 1. **David's Hamiltonian and geometry.** The open chain matches what an MPS code for the dynamical structure factor normally uses. If the end-to-end run needs a ring after all, $t$ stops at about 4 for random product inputs.
 2. **Mixed synthesis.** We leave it out and note it in the text as a further factor of about 2 in operator norm. It cannot help the fidelity, which is linear in the channel (Isaac, 1 Oct).
-3. **How loose is the fallback term?** Sampling the gadget outcomes in the MPS runs would replace the bound by the actual average. It matters only for the baseline, where the fallbacks are about 10% of the bound.
+3. **How loose is the fallback term?** Sampling the gadget outcomes in the MPS runs would replace the bound by the actual average. Each sample is one more circuit MPS, cheap next to the reference. It matters for the baseline and for SNAP at tight budgets, where the fallback share reaches 10% or more.
 4. **Cheaper edges.** The edge angles go to KN at about 17 T each. Snapping them to the library would cut that by about 4x.

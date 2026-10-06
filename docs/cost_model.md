@@ -52,7 +52,7 @@ $$
 \bar T(\epsilon) = 1.096 \log_2(1/\epsilon) + 4.44 ,
 $$
 
-against $1.03 \log_2(1/\epsilon) + 5.75$ in the paper's Table 1. We use the calibrated law in two places: to plan straggler precision inside the compiler, and to set $\delta_{\rm fb}(F) = 2^{-(F - 4.44)/1.096}$ (for example $1.9\times10^{-4}$ at $F = 18$ and $1.5\times10^{-5}$ at $F = 22$). Every reported straggler, edge and baseline cost comes from an actual circuit.
+against $1.03 \log_2(1/\epsilon) + 5.75$ in the paper's Table 1. We use the calibrated law in two places. It plans straggler precision inside the compiler, and it sets $\delta_{\rm fb}(F) = 2^{-(F - 4.44)/1.096}$ (for example $1.9\times10^{-4}$ at $F = 18$ and $1.5\times10^{-5}$ at $F = 22$). Every reported straggler, edge and baseline cost comes from an actual circuit.
 
 ## What is not in the model
 

@@ -2,6 +2,50 @@
 
 Checks run on this code and its inputs, newest first. Every number here can be reproduced with the commands given.
 
+## First 100-site runs, 2026-10-06
+
+Every number below is the state infidelity on the 8 random product inputs at $N = 100$ on the open chain, by MPS, cutoff $10^{-12}$ (`python -m snapevo summary` writes them all to `runs/summary.csv`). The cloud box ran them with 2 cores shared by up to four jobs.
+
+### SNAP points
+
+| model | $t$ | budget | $D$ | $1 - \bar F$ | with fallbacks | ring $1-(1-C)^{100}$ | T/q | T/rot | T/q/t | $\chi$ | change at cutoff/100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | 1 | $10^{-4}$ | 5 | 9.64e-03 | 9.71e-03 | 1.02e-02 | 66.2 | 5.30 | 66.2 | 11 | 2e-06 |
+| A | 1 | $10^{-5}$ | 5 | 1.01e-03 | 1.02e-03 | 1.07e-03 | 103.3 | 8.27 | 103.3 | 11 | 6e-06 |
+| A | 1 | $10^{-6}$ | 7 | 9.64e-05 | 1.12e-04 | 1.02e-04 | 146.2 | 8.35 | 146.2 | 10 | 5e-05 |
+| A | 2 | $10^{-4}$ | 7 | 9.80e-03 | 9.83e-03 | 9.99e-03 | 93.8 | 5.36 | 46.9 | 20 | 5e-06 |
+| A | 2 | $10^{-5}$ | 11 | 9.57e-04 | 1.24e-03 | 9.98e-04 | 160.7 | 5.85 | 80.4 | 19 | 5e-06 |
+| B | 1 | $10^{-4}$ | 5 | 9.54e-03 | 9.61e-03 | 1.01e-02 | 36.2 | 2.90 | 36.2 | 11 | 5e-06 |
+| B | 1 | $10^{-5}$ | 5 | 8.64e-04 | 8.71e-04 | 8.92e-04 | 68.2 | 5.46 | 68.2 | 11 | 1e-05 |
+| B | 1 | $10^{-6}$ | 7 | 9.74e-05 | 9.77e-05 | 1.02e-04 | 98.4 | 5.62 | 98.4 | 10 | 3e-05 |
+| B | 2 | $10^{-4}$ | 7 | 9.73e-03 | 9.76e-03 | 1.02e-02 | 70.6 | 4.03 | 35.3 | 21 | 6e-07 |
+| B | 2 | $10^{-5}$ | 11 | 6.62e-04 | 6.72e-04 | 7.09e-04 | 183.2 | 6.59 | 91.6 | 20 | 3e-05 |
+| B | 4 | $10^{-4}$ | 13 | 9.46e-03 | 9.49e-03 | 9.63e-03 | 106.5 | 3.28 | 26.6 | 58 | 9e-06 |
+
+The statistical error is 0.8% to 2.1% of the infidelity. Redoing input 0 at a cutoff of $10^{-14}$ changes its infidelity by at most $5\times10^{-5}$ relative, so truncation does not matter at these times. The open chain comes out 2% to 7% below the ring prediction, as the boundary fits of the last section say it should.
+
+Only one point kept fitted edges, model B at $t = 2$ and $B = 10^{-5}$. It is the $D = 11$ cell with large staggered angles. At $N_{\rm fit} = 12$ the fit took the open-chain infidelity from $8.3\times10^{-4}$ to $6.3\times10^{-5}$, below the ring's $8.0\times10^{-5}$. Its 30 KN rotations cost 545 T in all, 5.45 T per qubit at $N = 100$, about 3% of the point. Without them the boundary would roughly double the 100-site infidelity.
+
+### Against the product-formula baseline
+
+`baseline-scan` screened orders 2 and 4 with KN at the two budgets around the coherent estimate, then ran the Pareto front through the same MPS evaluation. Interpolating the front (log-log) at the SNAP point's infidelity gives the following T-count ratios, baseline over SNAP:
+
+| model | $t$ | $B = 10^{-4}$ | $10^{-5}$ | $10^{-6}$ |
+|---|---|---|---|---|
+| A | 1 | below 2.0 (outside the front) | 3.0 | 4.7 |
+| A | 2 | 3.8 | 4.6 | |
+| B | 1 | 1.7 | 2.0 | 2.5 |
+| B | 2 | 2.2 | 1.9 | |
+| B | 4 | 3.2 | | |
+
+This compares success branches. With the fallback bound on both sides the ratios grow (B 2.1 to 3.7, A 3.7 to 6.8), because the bound charges the baseline 10% to 90% of its total. The bound lets every fallback line up with the coherent error, so these totals are upper limits. The scan grids are coarse (order 2 and 4, $r$ up 1.5x per step, $\epsilon$ in steps of about 3), so a finer baseline search could move the ratios somewhat.
+
+### Timings on the cloud box
+
+Training ladders: $t = 1$, $D = 3$ to 9, 6 min per model. $t = 4$, $D = 9$ to 21 (model B), 55 min. Compiles: 1 min ($t = 1$, $D = 5$), 12 to 14 min ($t = 2$, $D = 11$, $B = 10^{-5}$, and $t = 4$, $D = 13$, $B = 10^{-4}$). Edge fits: 9 s to 4 min. A 100-site evaluation takes seconds up to $t = 4$ once the references are cached.
+
+The 100-site reference at $t = 10$ needs bond dimension 448 at cutoff $10^{-10}$ (discarded weight $1.6\times10^{-6}$, 28 min on a shared core). At $10^{-12}$ it had not finished after an hour. The $t = 10$ points belong on the cluster.
+
 ## MPS evaluation on the open chain, 2026-10-06
 
 ### Entanglement of random product inputs (exact, $N = 20$)
@@ -136,12 +180,12 @@ F = 18 lattice vs shipped rz_library_cat0_kn18.csv: max cost difference 5.0e-09
 A longer check the same day, in the claude.ai project doc `rz_library_corrected_check_2026-10-06`, also found the following:
 
 - Pygridsynth's exact synthesis gives the same T counts on all 4,580 rows once $n$ is supplied.
-- Isaac's README figures hold: the new library is 1.654x the old at the median, and 1.447x to 1.739x from the 10th to the 90th percentile.
+- Isaac's README figures hold. The new library is 1.654x the old at the median, and 1.447x to 1.739x from the 10th to the 90th percentile.
 - The corrected costs are never above Isaac's Oct 1 v2 costs, and are 2 T lower at 12,929 angles.
 - The $2k-2$ rule holds for all 25,550 $L = 10, 11$ gadgets as well.
 - The zip carries a stale `.pyc` of the old builder, which has identical function bytecode and was dropped here.
 
-## Tests (`pytest`, 18 tests, about 1 min)
+## Tests (`pytest`, 27 tests, about 2 min)
 
 The suite checks the following:
 
@@ -154,6 +198,11 @@ The suite checks the following:
 - Exact single-angle curves, including the staggered slot
 - Lanczos against dense arc widths
 - Exact against Haar-estimated process fidelity, and the fidelity bound
+- MPS against state vectors on the open chain, with default and random edges
+- The order-4 reference against exact evolution
+- The truncation error bar, MPS save and load, and the MPS evaluation against dense fidelities
+- The choice of the fallback cost F
+- ZYZ angles, the edge start point, and an edge fit that lowers the open-chain infidelity
 - Affine extrapolation
 - The order-2 Trotter layout
 - KN against its README example and the cache

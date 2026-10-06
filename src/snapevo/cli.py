@@ -10,6 +10,7 @@
     reference        build and cache the MPS references e^{-iHt}|phi_k> (mps.py)
     crosscheck       small-ring metrics of a realized point: op norm, diamond, process fidelity (crosscheck.py)
     report           table of every evaluated point of a model and time
+    summary          one CSV row per evaluated point, every model and time (runs/summary.csv)
     verify-library   independent check of the corrected gadget file (library_check.py)
 
 Files go to runs/<model tag>/t<t>/ (io.py); cached MPS references to its ref/ folder.
@@ -150,7 +151,7 @@ def cmd_evaluate(args, D: int | None = None) -> dict:
         _log(f"evaluate: {path.name} has no edge rotations yet; fitting them now")
         io.write_json(path, _add_edges(rec, model, cell, args.t, None))
     ev = evaluate_circuit(Layered.brickwork(cell, rec["angles_real"]), rec["edges"], rec["per_F"],
-                          rec["rotations_per_qubit"], model, args.t, N=args.N, ledger_frac=args.ledger_frac,
+                          rec["rotations_per_qubit"], model, args.t, N=args.N, f_tol=args.f_tol,
                           log=_log, **_mps_kw(args, d))
     ev.update({"model": model.to_dict(), "cell": cell.name, "t": args.t, "D": D, "budget": args.budget,
                "n_free": rec["n_free"], "n_t": rec["n_t"], "n_rus": rec["n_rus"], "n_kn": rec["n_kn"]})
@@ -186,7 +187,7 @@ def _baseline_point(args, model, d, order: int, steps: int, eps: float, crossche
     pricing = {"KN": {k: rb[k] for k in ("Tq", "ledger_per_qubit", "ledger2_per_qubit")}}
     _log(f"baseline: order {order}, r = {steps}, KN eps {eps:.0e}")
     ev = evaluate_circuit(real, None, pricing, rb["rotations_per_qubit"], model, args.t, N=args.N,
-                          ledger_frac=args.ledger_frac, log=_log, **_mps_kw(args, d))
+                          f_tol=args.f_tol, log=_log, **_mps_kw(args, d))
     out = {"model": model.to_dict(), "t": args.t, "order": order, "steps": steps, **rb, **ev}
     if crosscheck:
         from snapevo.crosscheck import measure
@@ -209,8 +210,16 @@ def cmd_baseline_scan(args) -> None:
     io.write_json(path, res)
     lo, hi = (float(v) for v in args.c_range.split(","))
     todo = [p for p in res["front"] if lo <= p["C"] <= hi]
+    if args.targets:
+        import math
+        picked = []
+        for c in (float(v) for v in args.targets.split(",")):
+            best = min(todo, key=lambda p: abs(math.log(p["C"] / c))) if todo else None
+            if best is not None and best not in picked:
+                picked.append(best)
+        todo = picked
     _log(f"baseline-scan: {len(res['points'])} points, front of {len(res['front'])}, "
-         f"{len(todo)} with C in [{lo:.0e}, {hi:.0e}]")
+         f"{len(todo)} to evaluate")
     for p in todo:
         _log(f"  front: order {p['order']}, r = {p['steps']}, eps {p['eps']:.0e}: C {p['C']:.3e}, T/q {p['Tq']:.1f}")
     if args.evaluate:
@@ -259,6 +268,37 @@ def cmd_report(args) -> None:
         if "mps" not in b:
             continue
         print(_row(f"o{b['order']}r{b['steps']}", "", b, "") + f"   N = {b['N']}, KN eps {b['eps']:.0e}")
+
+
+_SUMMARY_KEYS = ("infid", "infid_total", "fallback_share", "c_site", "C_ring", "infid_ring_pred", "Tq",
+                 "T_edges_per_qubit", "T_per_rotation", "T_per_qubit_per_time", "rotations_per_qubit")
+
+
+def cmd_summary(args) -> None:
+    import csv
+    import os
+    from pathlib import Path
+    base = Path(os.environ.get("SNAPEVO_RUNS", io.repo_root() / "runs"))
+    rows = []
+    for p in sorted(base.glob("*/t*/eval_*.json")) + sorted(base.glob("*/t*/baseline_o*.json")):
+        e = io.read_json(p)
+        if "mps" not in e:
+            continue
+        m = e["mps"]
+        snap = p.name.startswith("eval_")
+        rows.append({"model": p.parent.parent.name, "t": e["t"], "method": "snap" if snap else "baseline",
+                     "budget": e.get("budget", ""), "D": e.get("D", ""), "order": e.get("order", ""),
+                     "steps": e.get("steps", ""), "eps": e.get("eps", ""), "F": e["F"], "N": e["N"],
+                     "states": m["states"][1], "stderr": m["stderr"], "trunc_rel": m["trunc_rel"],
+                     "trunc_check": m.get("trunc_check", {}).get("rel_change", ""), "chi_peak": m["chi_peak"],
+                     **{k: e.get(k, "") for k in _SUMMARY_KEYS},
+                     **{k: e.get(k, "") for k in ("n_free", "n_t", "n_rus", "n_kn")}})
+    out = base / "summary.csv"
+    with out.open("w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0]) if rows else ["model"])
+        w.writeheader()
+        w.writerows(rows)
+    print(f"{len(rows)} points -> {out}")
 
 
 def cmd_verify_library(args) -> None:
@@ -313,7 +353,8 @@ def build_parser() -> argparse.ArgumentParser:
     eval_opts.add_argument("--no-cache", action="store_true", dest="no_cache", help="do not cache references")
     eval_opts.add_argument("--no-check", action="store_true", dest="no_check",
                            help="skip redoing input 0 at a 100x smaller cutoff")
-    eval_opts.add_argument("--ledger-frac", type=float, default=0.1, dest="ledger_frac")
+    eval_opts.add_argument("--f-tol", type=float, default=0.01, dest="f_tol",
+                           help="F is the smallest whose total is within this fraction of the total at F = 30")
 
     xc_opts = argparse.ArgumentParser(add_help=False)
     xc_opts.add_argument("--sizes", default="6,8,10,12,14", help="ring sizes for the exact op norm and process fidelity")
@@ -343,6 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
     common(p)
     p.add_argument("--c-range", default="1e-7,1e-3", dest="c_range", help="ring C range of front points to run")
     p.add_argument("--evaluate", action="store_true", help="run the MPS evaluation of the front points")
+    p.add_argument("--targets", default=None,
+                   help="comma-separated ring C values; evaluate only the front point nearest each")
     p.add_argument("--fresh", action="store_true", help="redo the scan and the evaluations")
     p.set_defaults(func=cmd_baseline_scan)
     p = sub.add_parser("reference", parents=[eval_opts], help="build and cache the MPS references")
@@ -355,6 +398,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("report", help="table of evaluated points")
     common(p)
     p.set_defaults(func=cmd_report)
+    p = sub.add_parser("summary", help="CSV of every evaluated point")
+    p.set_defaults(func=cmd_summary)
     p = sub.add_parser("verify-library", help="independent check of the corrected gadget file")
     p.set_defaults(func=cmd_verify_library)
     return ap

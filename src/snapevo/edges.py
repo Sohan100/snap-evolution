@@ -139,23 +139,26 @@ def _objective(circuit: Layered, N: int, inputs: np.ndarray, targets: np.ndarray
 
 
 def fit_edges(circuit: Layered, model: XXZ, t: float, N_fit: int | None = None,
-              states: tuple[int, int] = EDGE_SET, maxiter: int = 2000, log=print) -> dict:
+              states: tuple[int, int] = EDGE_SET, maxiter: int = 1000, log=print) -> dict:
     """Fit the edge rotations of a realized brickwork on an open chain of N_fit sites.
 
     Returns the angles and three infidelities at N_fit on the fit states: with
     the start point (no fit), with the fitted edges, and the same circuit on a
-    ring against the ring evolution (the bulk alone, for comparison).
+    ring against the ring evolution (the bulk alone, for comparison). The fit
+    stops once an iteration gains less than a thousandth of one bulk site's
+    worth of infidelity.
     """
     N = N_fit or fit_size(t)
     t0 = time.time()
     x_in = random_product_states(N, states[1], states[0])
+    ring_t = evolve(model.sparse(N, "ring"), x_in, t)
+    ring = 1.0 - float(np.mean(np.abs(np.sum(np.conj(ring_t) * circuit.apply(x_in, N), axis=1)) ** 2))
     target = evolve(model.sparse(N, "open"), x_in, t)
     f = _objective(circuit, N, x_in, target)
     x0 = start_angles(circuit)
     v0 = f(x0)[0]
-    res = minimize(f, x0, jac=True, method="L-BFGS-B", options={"maxiter": maxiter, "ftol": 1e-16, "gtol": 1e-13})
-    ring_t = evolve(model.sparse(N, "ring"), x_in, t)
-    ring = 1.0 - float(np.mean(np.abs(np.sum(np.conj(ring_t) * circuit.apply(x_in, N), axis=1)) ** 2))
+    res = minimize(f, x0, jac=True, method="L-BFGS-B",
+                   options={"maxiter": maxiter, "ftol": 1e-3 * ring / N, "gtol": 1e-13})
     out = {"N_fit": N, "states": list(states), "angles": res.x.tolist(), "infid_start": v0,
            "infid_fit": float(res.fun), "infid_ring": ring, "nit": int(res.nit), "seconds": time.time() - t0}
     log(f"edges: N_fit = {N}, {x0.size} angles, infidelity {v0:.3e} -> {res.fun:.3e} "

@@ -29,18 +29,18 @@ On a workstation, `cluster/run_local.sh cluster/jobs/points.txt` runs a list in 
 
 ## What to expect
 
-Measured on one core of the cloud box (2026-10-06), $N = 100$, cutoff $10^{-12}$:
+Measured on the cloud box (one core per job, often shared), $N = 100$, cutoff $10^{-12}$. Entries in italics are estimates.
 
-| $t$ | reference bond dimension | one reference | training ladder | one compile |
+| $t$ | reference bond dimension | one reference input | training ladder | one compile |
 |---|---|---|---|---|
 | 1 | 9 | 1 s | 6 min | 1 min |
-| 2 | 16 | 1 s | 15 min | 5 to 30 min |
-| 4 | 43 | 10 s | about 1 h | up to a few hours |
-| 6 | 110 | 45 s | hours | hours |
-| 8 | 275 | 6 min | many hours | up to a day |
-| 10 | see `docs/validation.md` | about 1 h | a day or more | days |
+| 2 | 16 | 1 to 2 s | *under 1 h* | 4 to 14 min |
+| 4 | 43 | 5 to 10 s | 55 min | 14 min at $10^{-4}$ |
+| 6 | 110 | 45 to 65 s | *a few hours* | *hours* |
+| 8 | 275 | 6 min | *many hours* | *up to a day* |
+| 10 | 448 at cutoff $10^{-10}$ | 28 min at $10^{-10}$, *1 to 2 h at $10^{-12}$* | *a day or more* | *days* |
 
-The compile times at large $t$ come from the Sep 2026 runs (16 h for a 61-sublayer cell). The reference cost grows as the bond dimension cubed, and 2 to 4 threads per task help from $t = 8$ on (`submit.sh` asks for 4). Each reference of an 8-input set at $t = 10$ takes a few hundred MB on disk.
+The compile times at large $t$ come from the Sep 2026 runs (16 h for a 61-sublayer cell). The reference cost grows as the bond dimension cubed, and 2 to 4 threads per task help from $t = 8$ on (`submit.sh` asks for 4). At $t = 10$ each cached reference input takes a few hundred MB on disk, so the 8 inputs of one model need a few GB.
 
 ## After the runs
 
@@ -48,4 +48,4 @@ The compile times at large $t$ come from the Sep 2026 runs (16 h for a 61-sublay
 python -m snapevo report --model B --t 10
 ```
 
-prints every SNAP and baseline point of one model and time. Copy `$SNAPEVO_RUNS` back to the PC's `runs/` to keep everything in one place. The `ref/` folders can be left behind once all points are evaluated.
+prints every SNAP and baseline point of one model and time, and `python -m snapevo summary` writes all of them to `$SNAPEVO_RUNS/summary.csv`. Copy `$SNAPEVO_RUNS` back to the PC's `runs/` to keep everything in one place. The `ref/` folders can be left behind once all points are evaluated.

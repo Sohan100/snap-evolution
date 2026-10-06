@@ -13,7 +13,7 @@ python -m venv .venv
 .venv\Scripts\activate            (on Linux or macOS: source .venv/bin/activate)
 pip install -e .[test]
 python -m snapevo verify-library  (independent check of the library file, ~30 s)
-pytest                            (26 tests, ~2 min)
+pytest                            (27 tests, ~2 min)
 ```
 
 ## Run one point
@@ -23,6 +23,7 @@ python -m snapevo train         --model B --t 2 --depths 7,9,11,13
 python -m snapevo point         --model B --t 2 --budget 1e-4 --D 7
 python -m snapevo baseline-scan --model B --t 2 --evaluate
 python -m snapevo report        --model B --t 2
+python -m snapevo summary                          (every point of every model and time, one CSV)
 ```
 
 `--model A` has $h_x = 1.6$ and `--model B` has no field (spin units, $\Delta = 0.25$). Times are in spin units. `point` runs `compile`, `realize` and `evaluate`, which also exist as separate commands, and `evaluate` builds the MPS references on first use (`reference` builds them ahead). Output goes to `runs/` (`docs/conventions.md` lists the files and their keys). The full sweep up to $t = 10$ runs on a cluster from `cluster/` (`cluster/README.md`).
