@@ -1,10 +1,12 @@
 """The target Hamiltonians, in spin units, and exact time evolution.
 
-Both models are the spin-1/2 XXZ ring with an optional uniform field along x,
+Both models are the spin-1/2 XXZ chain with an optional uniform field along x,
 
     H = J sum_i (S^x_i S^x_{i+1} + S^y_i S^y_{i+1} + Delta S^z_i S^z_{i+1}) + h_x sum_i S^x_i,
 
-with S = sigma / 2 and periodic boundary conditions. In Pauli operators this is
+with S = sigma / 2. Cells are trained on a ring (bc = "ring", site N is site 0).
+The 100-site evaluation runs on an open chain (bc = "open", no bond between
+N-1 and 0). In Pauli operators this is
 
     H = (J/4) sum_i (X_i X_{i+1} + Y_i Y_{i+1} + Delta Z_i Z_{i+1}) + (h_x/2) sum_i X_i,
 
@@ -30,7 +32,7 @@ _I = sp.identity(2, format="csr", dtype=complex)
 
 @dataclass(frozen=True)
 class XXZ:
-    """Spin-1/2 XXZ ring with a uniform x field, in spin units.
+    """Spin-1/2 XXZ chain with a uniform x field, in spin units.
 
     Attributes:
         delta: Anisotropy of the ZZ term.
@@ -59,7 +61,7 @@ class XXZ:
         return self.hx / 2
 
     def describe(self) -> str:
-        return f"XXZ ring, Delta = {self.delta:g}, h_x = {self.hx:g}, J = {self.J:g} (spin units)"
+        return f"XXZ, Delta = {self.delta:g}, h_x = {self.hx:g}, J = {self.J:g} (spin units)"
 
     def to_dict(self) -> dict:
         return {"delta": self.delta, "hx": self.hx, "J": self.J}
@@ -68,8 +70,10 @@ class XXZ:
     def from_dict(cls, d: dict) -> XXZ:
         return cls(float(d["delta"]), float(d["hx"]), float(d.get("J", 1.0)))
 
-    def sparse(self, N: int) -> sp.csr_matrix:
-        """The Hamiltonian on an N-site ring as a sparse (2^N, 2^N) matrix."""
+    def sparse(self, N: int, bc: str = "ring") -> sp.csr_matrix:
+        """The Hamiltonian on N sites as a sparse (2^N, 2^N) matrix, on a ring or an open chain."""
+        if bc not in ("ring", "open"):
+            raise ValueError(f"bc must be 'ring' or 'open', not {bc!r}")
         def embed(ops: dict[int, sp.csr_matrix]) -> sp.csr_matrix:
             out = None
             for site in range(N):
@@ -79,7 +83,7 @@ class XXZ:
 
         cxx, cyy, czz = self.bond_pauli
         H = sp.csr_matrix((2 ** N, 2 ** N), dtype=complex)
-        for i in range(N):
+        for i in range(N if bc == "ring" else N - 1):
             j = (i + 1) % N
             H = H + cxx * embed({i: _X, j: _X}) + cyy * embed({i: _Y, j: _Y})
             if czz:

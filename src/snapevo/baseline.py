@@ -19,15 +19,20 @@ captures.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from snapevo.cells import CELLS
-from snapevo.circuits import Layered
+from snapevo.circuits import HELD_OUT_SETS, Layered, local_infidelity, state_pairs
 from snapevo.hamiltonian import XXZ
 from snapevo.library import QUARTER
 from snapevo.synthesis import kn_cost, synthesize
 
-__all__ = ["trotter_circuit", "rotation_tally", "realize_baseline", "plan_cost"]
+__all__ = ["trotter_circuit", "rotation_tally", "realize_baseline", "plan_cost", "EPS_GRID", "scan"]
+
+EPS_GRID = (1e-2, 3e-3, 1e-3, 3e-4, 1e-4, 3e-5, 1e-5, 3e-6, 1e-6, 3e-7, 1e-7)
+"""KN budgets the scan chooses from."""
 
 _CELL = CELLS["xxz+x"]
 
@@ -128,3 +133,41 @@ def realize_baseline(circuit: Layered, eps: float) -> dict:
     return {"circuit": Layered(circuit.cell, layers), "Tq": Tq, "ledger_per_qubit": ledger,
             "ledger2_per_qubit": ledger2, "rotations_per_qubit": rot, "n_distinct": len(syn), "eps": eps,
             "synth": {f"{k:.15f}": v for k, v in syn.items()}}
+
+
+def scan(model: XXZ, t: float, orders=(2, 4), c_floor: float = 1e-8, r_max: int = 1024, log=print) -> dict:
+    """Ring C at N = 10 and T per qubit of product formulas plus KN, and their Pareto front.
+
+    For each order, r grows geometrically until the Trotter-only C is below
+    ``c_floor``. Each (order, r) is synthesized at the two grid budgets around
+    eps*, where KN's coherent error, about (R x 0.45 eps)^2 per site for R
+    rotations per qubit, is a third of the Trotter C. C is measured on one
+    held-out set (64 states). The front is what evaluate.py then runs at N = 100.
+    """
+    seed, n = HELD_OUT_SETS[1]
+    tin, tg = state_pairs(model, 10, t, n, seed)
+    points = []
+    for order in orders:
+        r = 1
+        while True:
+            circ = trotter_circuit(model, t, order, r)
+            c_tr = local_infidelity(circ.apply(tin, 10), tg, 10)
+            R = sum(rotation_tally(circ).values())
+            eps_star = math.sqrt(c_tr / 3) / (0.45 * R) if R else EPS_GRID[0]
+            near = [e for e in EPS_GRID if e > eps_star][-1:] + [e for e in EPS_GRID if e <= eps_star][:1]
+            for eps in near:
+                rb = realize_baseline(circ, eps)
+                c = local_infidelity(rb["circuit"].apply(tin, 10), tg, 10)
+                points.append({"order": order, "steps": r, "eps": eps, "C": c, "C_trotter": c_tr,
+                               "Tq": rb["Tq"], "rotations_per_qubit": rb["rotations_per_qubit"]})
+                log(f"scan: order {order}, r = {r:3d}, eps {eps:.0e}: C {c:.3e} (Trotter {c_tr:.3e}), "
+                    f"T/q {rb['Tq']:.1f}")
+            if c_tr < c_floor or r >= r_max:
+                break
+            r = r + 1 if r < 4 else int(round(r * 1.5))
+    front, best_c = [], math.inf
+    for p in sorted(points, key=lambda p: (p["Tq"], p["C"])):
+        if p["C"] < best_c:
+            front.append(p)
+            best_c = p["C"]
+    return {"model": model.to_dict(), "t": t, "N": 10, "states": [seed, n], "points": points, "front": front}

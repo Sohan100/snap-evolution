@@ -23,11 +23,23 @@ Qubit 0 is the most significant bit of a state index. Sublayer $l$ applies one c
 
 The gate is $e^{-i(aXX + bYY + cZZ)/2}$ times the single-qubit part, and the single-qubit part acts first. The staggered part is $R_z(d) \otimes R_z(-d)$, which costs two rotations of the same library price. The field part is $R_x(e) \otimes R_x(f)$.
 
+On the open chain (the evaluation) the bond $(N-1, 0)$ does not exist. In each odd sublayer its gate is replaced by a single-qubit gate on site $N-1$ and one on site 0. By default these are the cell's single-qubit factor, the wrap gate with its coupling removed. Fitted edges replace them by $R_z(\alpha) R_y(\beta) R_z(\gamma)$, stored as six angles per odd sublayer, site $N-1$ first.
+
 A first-order Trotter step of length $\tau$ is two sublayers with $a = b = J\tau/2$, $c = J\Delta\tau/2$ and $e = f = h_x \tau/2$. A depth-$D$ cell for time $t$ starts from $\tau = 2t/D$.
 
 ## State sets
 
-Training uses 12 product states with seed 0 at $N = 10$. The ladder's `C_val` uses 32 states with seed 999. Held-out sets are seeds 54321 (16 states), 777, 2468 and 13579 (64 states each), at $N = 10$ and $12$. The draws are the same as in the Sep 2026 code, so old and new numbers compare state for state.
+Every input is a product of random single-qubit states, drawn site by site from one seed (`circuits.product_vectors`). The sets are as follows:
+
+| use | seed | states | size |
+|---|---|---|---|
+| training and compiling | 0 | 12 | ring, $N = 10$ |
+| ladder `C_val` | 999 | 32 | ring, $N = 10$ |
+| held-out $C$ | 54321, 777, 2468, 13579 | 16, 64, 64, 64 | ring, $N = 10$ and 12 |
+| edge fit | 31415 | 12 | open chain, $N_{\rm fit}$ |
+| reported error | 2026 | 8 | open chain, $N = 100$ |
+
+The draws are the same as in the Sep 2026 code, so old and new numbers compare state for state.
 
 ## Signs in the library file
 
@@ -44,12 +56,24 @@ All run files live in `runs/<model tag>/t<t>/` (`io.py`). The JSON keys are as f
 : `settings`, `floor`, `C_train`, `angles`, `snapped`, `costs_plan`, `multiplicity`, `Tq_plan`, `stragglers {i: {eps, T_plan, dC_plan}}`, `library_stragglers`, counters, `trace`, `history` (every accepted prefix), `seconds`, `model`, `cell`, `t`, `D`, `N`.
 
 `real_b<B>_D<D>.json`
-: `angles_compiled`, `angles_real`, `multiplicity`, `C_train_real`, `straggler_eps_scale`, `lattice {i: {kind, cost[F], q[F]}}`, `kn {i: synthesis record}`, `per_F {F: {Tq, ledger_per_qubit, ledger2_per_qubit, delta_fb}}`, `rotations_per_qubit`, counts.
+: `angles_compiled`, `angles_real`, `multiplicity`, `C_train_real`, `straggler_eps_scale`, `lattice {i: {kind, cost[F], q[F]}}`, `kn {i: synthesis record}`, `per_F {F: {Tq, ledger_per_qubit, ledger2_per_qubit, delta_fb}}`, `rotations_per_qubit`, counts, and `edges` (below).
+
+`edges` (inside the realized file)
+: `use`, `N_fit`, `states`, `angles` (fitted), `angles_real` (after KN, or null when not kept), `infid_start`, `infid_fit`, `infid_ring` (all at $N_{\rm fit}$ on the fit states), `eps`, `kn {i: synthesis record}`, `n_rotations`, `T_total`, `ledger_total`, `ledger2_total`.
 
 `eval_b<B>_D<D>.json`
-: `held_out`, `arcs` (per $N$: $w$, $\epsilon_{\rm op}$, $D_{\rm coh}$, timing), `process` (per $N$: $F_e$, per-site $c_e$, method), `alpha`, `extrapolation`, `fidelity` (success branch: `C`, `c_e`, `state_infid_10`, `state_infid`, `process_infid`), `per_F`, the chosen `F`, and the totals `D_total`, `state_infid_total`, `process_infid_total`, with `ledger`, `Q2`, `D_coh`, `Tq`, `T_per_rotation`, `T_per_qubit_per_time`.
+: `N`, `mps` (per input: `F`, `infid`, `infid_lo`, `infid_hi`, discarded weights, bond dimensions, seconds; then `infid`, `stderr`, `c_site`, `trunc_rel`, `trunc_flag`, `chi_peak` and the MPS settings), `C_ring` and `infid_ring_pred`, `per_F {F: {Tq, ledger, Q2, infid_total}}`, the chosen `F`, `infid`, `infid_total`, `c_site`, `Tq`, `T_edges_per_qubit`, `rotations_per_qubit`, `T_per_rotation`, `T_per_qubit_per_time`, rotation counts.
 
 `baseline_o<order>_r<steps>_e<eps>.json`
-: `trotter` and `realized`, each a full measurement as in the eval file, then `Tq`, the ledgers, the same three totals, and every synthesis record.
+: the realized baseline (`Tq`, ledgers, `rotations_per_qubit`, every synthesis record) and the same evaluation keys as an eval file, with the single pricing label `KN`. With `--crosscheck`, also `crosscheck {trotter, realized}`.
 
-`Tq` is expected T per qubit for the whole circuit (time $t$). T per rotation divides by 2.5 Rz per qubit per sublayer times $D$.
+`baseline_scan.json`
+: every screened `(order, steps, eps)` with its ring `C`, Trotter-only `C_trotter` and `Tq`, and the Pareto `front`.
+
+`xcheck_b<B>_D<D>.json`
+: the small-ring cross-checks: `held_out`, `arcs` (per $N$: $w$, $\epsilon_{\rm op}$, $D_{\rm coh}$), `process` (per $N$: $F_e$, $c_e$), `alpha`, `extrapolation`, `fidelity`, and the totals `D_total`, `state_infid_total`, `process_infid_total` at $N = 100$ on the ring.
+
+`ref/ref_N<N>_s<seed>_k<k>_dt<dt>_c<cutoff>_x<chi_max>.npz`
+: the cached MPS of $e^{-iHt}$ on input $k$: tensors `A0`, `A1`, ... and a JSON `meta` with the settings, discarded weight, peak bond dimension, center and seconds.
+
+`Tq` is expected T per qubit for the whole circuit (time $t$), with the edge rotations divided over the $N$ qubits. T per rotation divides by the rotations per qubit, 2.5 per sublayer times $D$ plus the edge rotations over $N$.

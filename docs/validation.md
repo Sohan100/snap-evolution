@@ -2,6 +2,68 @@
 
 Checks run on this code and its inputs, newest first. Every number here can be reproduced with the commands given.
 
+## MPS evaluation on the open chain, 2026-10-06
+
+### Entanglement of random product inputs (exact, $N = 20$)
+
+Half-chain entropy and the bond dimension that keeps the discarded weight below $\epsilon$, for one random product input, spin units:
+
+| $t$ | B chain $S$ | B chain $\chi(10^{-6})$, $\chi(10^{-10})$ | B ring $\chi(10^{-6})$, $\chi(10^{-10})$ | A chain $S$ | A ring $\chi(10^{-10})$ |
+|---|---|---|---|---|---|
+| 1 | 0.14 | 4, 7 | 12, 25 | 0.16 | 26 |
+| 2 | 0.52 | 7, 12 | 28, 83 | 0.40 | 83 |
+| 4 | 1.02 | 17, 35 | 171, 520 | 0.94 | 444 |
+| 6 | 1.82 | 42, 87 | 651, 977 | 1.61 | 918 |
+
+The ring's half has two cuts, so its bond dimension is about the square of the chain's once the two cuts are independent. At $N = 20$ and $t \ge 4$ the ring numbers are already capped by the system size. This is why the 100-site runs use an open chain (`docs/error_metric.md`).
+
+### MPS code against state vectors (`tests/test_mps.py`)
+
+With no truncation, the MPS of the realized smoke circuit and of a trained model A cell at $N = 10$ agree with the state-vector simulation to $8\times10^{-15}$, with the default edges and with random edge gates. MPS overlaps agree with dense ones to $10^{-17}$.
+
+### The reference $e^{-iHt}$
+
+The reference is the order-4 Suzuki formula. Its infidelity per site against exact evolution, open chain, $N = 12$, 4 inputs:
+
+| model | $t$ | step 0.2 | step 0.1 | step 0.05 |
+|---|---|---|---|---|
+| B | 2 | $1.6\times10^{-13}$ | below $10^{-13}$ | below $10^{-13}$ |
+| B | 10 | $4.2\times10^{-13}$ | below $10^{-13}$ | below $10^{-13}$ |
+| A | 2 | $1.0\times10^{-11}$ | below $10^{-13}$ | below $10^{-13}$ |
+| A | 10 | $2.6\times10^{-11}$ | $1.7\times10^{-13}$ | below $10^{-13}$ |
+
+We use step 0.2. At $N = 100$ that is at most $3\times10^{-9}$, far below any circuit we evaluate.
+
+### Cost of the 100-site references (model B, one input, cutoff $10^{-12}$, one core)
+
+| $t$ | peak bond dimension | summed discarded weight | seconds |
+|---|---|---|---|
+| 1 | 9 | $5.6\times10^{-10}$ | 0.3 |
+| 2 | 16 | $1.5\times10^{-9}$ | 0.8 |
+| 4 | 43 | $4.4\times10^{-9}$ | 5 |
+| 6 | 109 | $8.0\times10^{-9}$ | 36 |
+| 8 | 275 | $1.2\times10^{-8}$ | 364 |
+
+### Boundary of the ring-trained cells
+
+Infidelity on 24 random product inputs at $t = 2$, ring against open chain. On the chain the wrap gate keeps only its single-qubit factor ("1q") or is dropped entirely ("drop"). The last two columns fit $1 - F = cN + b$ to $N = 12, 14, 16$ and give $b/c$, the boundary in bulk sites:
+
+| cell | $N = 8$ ring, 1q, drop | $N = 16$ ring, 1q, drop | $b/c$ ring | $b/c$ 1q |
+|---|---|---|---|---|
+| B, SNAP $D = 7$, $10^{-4}$ | $8.0, 5.1, 5.1 \times10^{-4}$ | $1.6, 1.3, 1.3 \times10^{-3}$ | $-1.1$ | $-3.2$ |
+| B, trained $D = 7$ | $1.5, 0.88, 0.88 \times10^{-4}$ | $3.1, 2.5, 2.5 \times10^{-4}$ | $-0.6$ | $-3.6$ |
+| B, trained $D = 11$ | $7.9\times10^{-6}$, $3.8\times10^{-4}$, $8.9\times10^{-3}$ | $1.6\times10^{-5}$, $3.8\times10^{-4}$, $9.1\times10^{-3}$ | $-1.5$ | no fit |
+| A, trained $D = 7$ | $1.7, 1.6 \times10^{-4}$, 0.41 | $3.3, 3.3 \times10^{-4}$, 0.40 | $-0.3$ | $-0.5$ |
+| A, trained $D = 11$ | $1.3, 1.8 \times10^{-5}$, 0.61 | $2.5, 3.0 \times10^{-5}$, 0.60 | $-0.5$ | $2.4$ |
+
+Dropping the wrap gate removes half the field from the end sites of model A, so the single-qubit factor has to stay. With it, model A and the shallow model B cells are fine. The $D = 11$ zero-field cell has large staggered angles (up to 0.5 rad, against 0.002 at $D = 7$) and a boundary error of about $4\times10^{-4}$ that does not grow with $N$.
+
+Fitting the edge rotations of that cell at $N_{\rm fit} = 12$ (30 angles, 89 s) takes the fit infidelity from $4.1\times10^{-4}$ to $8.6\times10^{-6}$, below the ring's $1.2\times10^{-5}$. On fresh inputs the open chain with fitted edges gives $5.0\times10^{-6}$, $8.9\times10^{-6}$ and $1.3\times10^{-5}$ at $N = 8, 12, 16$, against $7.9\times10^{-6}$, $1.2\times10^{-5}$ and $1.6\times10^{-5}$ on the ring. For the smoke circuit the fit gains less than one bulk site's worth, so its edges stay at the cell's own factor and cost nothing.
+
+### KN on negative angles
+
+Isaac's `synthesize` failed its own check ("rebuilt circuit != priced circuit") at $\theta = -0.4429453$, $\epsilon = 10^{-4}$, robustly under perturbations of $10^{-8}$ in $\theta$ and 0.1% in $\epsilon$. It prices at $\theta$ and rebuilds at $\theta \bmod 2\pi$, and the two searches can differ for negative angles. Passing $\theta \bmod 2\pi$ fixes it (15.9 T expected). The vendored package is unchanged, and `synthesis.py` now always passes $[0, 2\pi)$. Worth telling Isaac.
+
 ## Smoke run, 2026-10-06
 
 The smoke run used model B ($h_x = 0$), $t = 2$ in spin units (Pauli $t = 0.5$), on the cloud box with 2 cores shared by four jobs.

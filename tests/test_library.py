@@ -9,7 +9,7 @@ def test_rows():
     g = load_gadgets()
     assert len(g) == 4580
     assert sum(x.source.endswith("_oddshift") for x in g) == 2290
-    # metrics.fidelity_bound needs q <= 1 (variance of the fallback count <= 2q)
+    # evaluate.fidelity_bound needs q <= 1 (variance of the fallback count <= 2q)
     assert min(x.p for x in g) >= 0.9 and Library(18.0).Q.max() <= 1.0
 
 

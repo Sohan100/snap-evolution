@@ -1,0 +1,66 @@
+python -m snapevo reference --model A --t 1
+python -m snapevo reference --model A --t 1 --only 0 --cutoff 1e-14
+python -m snapevo reference --model A --t 2
+python -m snapevo reference --model A --t 2 --only 0 --cutoff 1e-14
+python -m snapevo reference --model A --t 4
+python -m snapevo reference --model A --t 4 --only 0 --cutoff 1e-14
+python -m snapevo reference --model A --t 6 --only 0
+python -m snapevo reference --model A --t 6 --only 1
+python -m snapevo reference --model A --t 6 --only 2
+python -m snapevo reference --model A --t 6 --only 3
+python -m snapevo reference --model A --t 6 --only 4
+python -m snapevo reference --model A --t 6 --only 5
+python -m snapevo reference --model A --t 6 --only 6
+python -m snapevo reference --model A --t 6 --only 7
+python -m snapevo reference --model A --t 6 --only 0 --cutoff 1e-14
+python -m snapevo reference --model A --t 8 --only 0
+python -m snapevo reference --model A --t 8 --only 1
+python -m snapevo reference --model A --t 8 --only 2
+python -m snapevo reference --model A --t 8 --only 3
+python -m snapevo reference --model A --t 8 --only 4
+python -m snapevo reference --model A --t 8 --only 5
+python -m snapevo reference --model A --t 8 --only 6
+python -m snapevo reference --model A --t 8 --only 7
+python -m snapevo reference --model A --t 8 --only 0 --cutoff 1e-14
+python -m snapevo reference --model A --t 10 --only 0
+python -m snapevo reference --model A --t 10 --only 1
+python -m snapevo reference --model A --t 10 --only 2
+python -m snapevo reference --model A --t 10 --only 3
+python -m snapevo reference --model A --t 10 --only 4
+python -m snapevo reference --model A --t 10 --only 5
+python -m snapevo reference --model A --t 10 --only 6
+python -m snapevo reference --model A --t 10 --only 7
+python -m snapevo reference --model A --t 10 --only 0 --cutoff 1e-14
+python -m snapevo reference --model B --t 1
+python -m snapevo reference --model B --t 1 --only 0 --cutoff 1e-14
+python -m snapevo reference --model B --t 2
+python -m snapevo reference --model B --t 2 --only 0 --cutoff 1e-14
+python -m snapevo reference --model B --t 4
+python -m snapevo reference --model B --t 4 --only 0 --cutoff 1e-14
+python -m snapevo reference --model B --t 6 --only 0
+python -m snapevo reference --model B --t 6 --only 1
+python -m snapevo reference --model B --t 6 --only 2
+python -m snapevo reference --model B --t 6 --only 3
+python -m snapevo reference --model B --t 6 --only 4
+python -m snapevo reference --model B --t 6 --only 5
+python -m snapevo reference --model B --t 6 --only 6
+python -m snapevo reference --model B --t 6 --only 7
+python -m snapevo reference --model B --t 6 --only 0 --cutoff 1e-14
+python -m snapevo reference --model B --t 8 --only 0
+python -m snapevo reference --model B --t 8 --only 1
+python -m snapevo reference --model B --t 8 --only 2
+python -m snapevo reference --model B --t 8 --only 3
+python -m snapevo reference --model B --t 8 --only 4
+python -m snapevo reference --model B --t 8 --only 5
+python -m snapevo reference --model B --t 8 --only 6
+python -m snapevo reference --model B --t 8 --only 7
+python -m snapevo reference --model B --t 8 --only 0 --cutoff 1e-14
+python -m snapevo reference --model B --t 10 --only 0
+python -m snapevo reference --model B --t 10 --only 1
+python -m snapevo reference --model B --t 10 --only 2
+python -m snapevo reference --model B --t 10 --only 3
+python -m snapevo reference --model B --t 10 --only 4
+python -m snapevo reference --model B --t 10 --only 5
+python -m snapevo reference --model B --t 10 --only 6
+python -m snapevo reference --model B --t 10 --only 7
+python -m snapevo reference --model B --t 10 --only 0 --cutoff 1e-14

@@ -9,7 +9,7 @@ Every rotation of the compiled brickwork ends up as one of
   allotted. Its success branch is exactly Rz(theta_s), so the realized angle is
   theta_s, and its fallback branch runs with probability 1 - p.
 
-The realized circuit (success branch everywhere) is what metrics.py measures
+The realized circuit (success branch everywhere) is what evaluate.py measures
 directly. The heralded branches go in the ledger: per qubit per circuit,
 
     ledger  = (1/2) sum_i m_i q_i delta_i,      ledger2 = (1/2) sum_i m_i q_i delta_i^2,
@@ -19,7 +19,7 @@ branch from the success branch. At N sites the ledger contributes N x ledger
 to the diamond error, and both enter the fidelity bound (docs/error_metric.md).
 
 The library part depends on the fallback cost F only through cost and q, so it
-is priced on a grid of F and metrics.py picks F.
+is priced on a grid of F and evaluate.py picks F.
 """
 
 from __future__ import annotations

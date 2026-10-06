@@ -1,0 +1,12 @@
+python -m snapevo train --model A --t 1 --depths 3,5,7,9,11
+python -m snapevo train --model A --t 2 --depths 7,9,11,13,15,17
+python -m snapevo train --model A --t 4 --depths 9,11,13,15,17,21,25,29
+python -m snapevo train --model A --t 6 --depths 13,17,21,25,29,33,37
+python -m snapevo train --model A --t 8 --depths 17,21,25,29,33,37,41,45
+python -m snapevo train --model A --t 10 --depths 21,25,29,33,37,41,45,49,53
+python -m snapevo train --model B --t 1 --depths 3,5,7,9,11
+python -m snapevo train --model B --t 2 --depths 7,9,11,13,15,17
+python -m snapevo train --model B --t 4 --depths 9,11,13,15,17,21,25,29
+python -m snapevo train --model B --t 6 --depths 13,17,21,25,29,33,37
+python -m snapevo train --model B --t 8 --depths 17,21,25,29,33,37,41,45
+python -m snapevo train --model B --t 10 --depths 21,25,29,33,37,41,45,49,53
