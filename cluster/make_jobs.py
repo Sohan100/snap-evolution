@@ -36,7 +36,8 @@ def main() -> None:
         "train": [f"{py} train --model {m} --t {t} --depths {DEPTHS[t]}" for m in MODELS for t in TIMES],
         "reference": [],
         "points": [f"{py} point --model {m} --t {t} --budget {b}" for m in MODELS for t in TIMES for b in BUDGETS],
-        "baselines": [f"{py} baseline-scan --model {m} --t {t} --evaluate" for m in MODELS for t in TIMES],
+        "baselines": [f"{py} baseline-scan --model {m} --t {t} --evaluate --targets {','.join(BUDGETS)}"
+                      for m in MODELS for t in TIMES],
     }
     for m in MODELS:
         for t in TIMES:

@@ -62,7 +62,7 @@ All run files live in `runs/<model tag>/t<t>/` (`io.py`). The JSON keys are as f
 : `use`, `N_fit`, `states`, `angles` (fitted), `angles_real` (after KN, or null when not kept), `infid_start`, `infid_fit`, `infid_ring` (all at $N_{\rm fit}$ on the fit states), `eps`, `kn {i: synthesis record}`, `n_rotations`, `T_total`, `ledger_total`, `ledger2_total`.
 
 `eval_b<B>_D<D>.json`
-: `N`, `mps` (per input: `F`, `infid`, `infid_lo`, `infid_hi`, discarded weights, bond dimensions, seconds; then `infid`, `stderr`, `c_site`, `trunc_rel`, `trunc_flag`, `chi_peak` and the MPS settings), `C_ring` and `infid_ring_pred`, `per_F {F: {Tq, ledger, Q2, infid_total}}`, the chosen `F`, `infid`, `infid_total`, `c_site`, `Tq`, `T_edges_per_qubit`, `rotations_per_qubit`, `T_per_rotation`, `T_per_qubit_per_time`, rotation counts.
+: `N`, `mps` (per input: `F`, `infid`, `infid_lo`, `infid_hi`, discarded weights, bond dimensions, seconds; then `infid`, `stderr`, `c_site`, `trunc_rel`, `trunc_flag`, `chi_peak` and the MPS settings), `C_ring` and `infid_ring_pred`, `per_F {F: {Tq, ledger, Q2, infid_total}}`, the chosen `F`, `infid`, `infid_total`, `fallback_share`, `fallback_flag`, `c_site`, `Tq`, `T_edges_per_qubit`, `rotations_per_qubit`, `T_per_rotation`, `T_per_qubit_per_time`, rotation counts.
 
 `baseline_o<order>_r<steps>_e<eps>.json`
 : the realized baseline (`Tq`, ledgers, `rotations_per_qubit`, every synthesis record) and the same evaluation keys as an eval file, with the single pricing label `KN`. With `--crosscheck`, also `crosscheck {trotter, realized}`.

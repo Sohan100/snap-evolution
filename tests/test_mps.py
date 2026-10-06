@@ -77,3 +77,16 @@ def test_evaluate_matches_dense_fidelity():
     F = np.abs(np.sum(np.conj(exact) * c.apply(x, 8, bc="open"), axis=1)) ** 2
     assert math.isclose(ev["infid"], 1 - F.mean(), rel_tol=1e-6)        # reference error ~1e-8 relative
     assert math.isclose(ev["infid_total"], ev["infid"], rel_tol=1e-12) and ev["F"] == "18"
+
+
+def test_F_is_the_cheapest_converged_fallback_cost():
+    model = XXZ(0.25, 0.0)
+    c = _circuit("xxz+stag", model, 1.0, 5)
+    pricing = {f: {"Tq": 10.0 + i, "ledger_per_qubit": led, "ledger2_per_qubit": 0.0}
+               for i, (f, led) in enumerate((("18", 1e-3), ("22", 2e-6), ("30", 1e-6)))}
+    ev = evaluate_circuit(c, None, pricing, 5.0, model, 1.0, N=8, states=(7, 2), dt=0.1, check=False,
+                          log=lambda *_: None)
+    tot = {f: ev["per_F"][f]["infid_total"] for f in pricing}
+    assert tot["18"] > 1.01 * tot["30"] and tot["22"] <= 1.01 * tot["30"]
+    assert ev["F"] == "22" and math.isclose(ev["Tq"], 11.0)
+    assert 0 < ev["fallback_share"] < 0.1

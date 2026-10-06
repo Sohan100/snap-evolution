@@ -17,8 +17,11 @@ counts is ``trunc_check``: input 0 is redone at a cutoff 100 times smaller and t
 relative change of its infidelity is reported. Either above 5% flags the point.
 
 Fallbacks. The heralded branches enter through fidelity_bound, with
-L = N l + L_edges and Q2 = N l2 / 2 + Q2_edges (realize.py, edges.py), and F is
-the smallest library fallback cost at which they are at most 10% of the total.
+L = N l + L_edges and Q2 = N l2 / 2 + Q2_edges (realize.py, edges.py). A larger
+library fallback cost F only shrinks the library's share of L, for a few tenths
+of a T, so F is the smallest grid value whose total is within ``f_tol`` (1%) of
+the total at the largest F. What is left (mostly KN stragglers) is reported as
+``fallback_share`` of the total and flagged above 10%.
 """
 
 from __future__ import annotations
@@ -112,7 +115,7 @@ def _order(label: str) -> float:
 
 
 def evaluate_circuit(circuit: Layered, edges: dict | None, pricing: dict, rotations_per_qubit: float,
-                     model: XXZ, t: float, N: int = 100, ledger_frac: float = 0.1, log=print, **mps_kw) -> dict:
+                     model: XXZ, t: float, N: int = 100, f_tol: float = 0.01, log=print, **mps_kw) -> dict:
     """MPS infidelity of a realized circuit, its totals with fallbacks, and its T counts.
 
     ``edges`` is the record of edges.realize_edges (None for circuits that need
@@ -129,25 +132,24 @@ def evaluate_circuit(circuit: Layered, edges: dict | None, pricing: dict, rotati
     m = mps_infidelity(circuit, pairs_, model, t, N=N, log=log, **mps_kw)
     C = held_out(circuit, model, t, sizes=(10,))["worst"]
     labels = sorted(pricing, key=_order)
-    per, choice = {}, None
+    per = {}
     for label in labels:
         pf = pricing[label]
         L = N * pf["ledger_per_qubit"] + E["ledger_total"]
         Q2 = N * pf["ledger2_per_qubit"] / 2 + E["ledger2_total"] / 2
         total = fidelity_bound(m["infid"], L, Q2)
-        Tq = pf["Tq"] + E["T_total"] / N
-        per[label] = {"Tq": Tq, "ledger": L, "Q2": Q2, "infid_total": total}
-        if choice is None and total - m["infid"] <= ledger_frac * total:
-            choice = label
-    if choice is None:
-        choice = labels[-1]
+        per[label] = {"Tq": pf["Tq"] + E["T_total"] / N, "ledger": L, "Q2": Q2, "infid_total": total}
+    floor = per[labels[-1]]["infid_total"]
+    choice = next(lab for lab in labels if per[lab]["infid_total"] <= (1.0 + f_tol) * floor)
     best = per[choice]
+    share = (best["infid_total"] - m["infid"]) / best["infid_total"] if best["infid_total"] > 0 else 0.0
     rot = rotations_per_qubit + E["n_rotations"] / N
     out = {"N": N, "mps": m, "C_ring": C, "infid_ring_pred": 1.0 - (1.0 - C) ** N, "per_F": per, "F": choice,
-           "infid": m["infid"], "infid_total": best["infid_total"], "c_site": m["c_site"], "ledger": best["ledger"],
+           "infid": m["infid"], "infid_total": best["infid_total"], "fallback_share": share,
+           "fallback_flag": share > 0.1, "c_site": m["c_site"], "ledger": best["ledger"],
            "Tq": best["Tq"], "T_edges_per_qubit": E["T_total"] / N, "rotations_per_qubit": rot,
            "T_per_rotation": best["Tq"] / rot, "T_per_qubit_per_time": best["Tq"] / t}
     log(f"evaluate: N = {N}, F = {choice}: 1 - F = {m['infid']:.3e} (ring C predicts "
-        f"{out['infid_ring_pred']:.3e}), with fallbacks {best['infid_total']:.3e}; "
+        f"{out['infid_ring_pred']:.3e}), with fallbacks {best['infid_total']:.3e} (share {share:.1%}), "
         f"T/q {best['Tq']:.1f} (edges {out['T_edges_per_qubit']:.2f}), T/rot {out['T_per_rotation']:.2f}")
     return out

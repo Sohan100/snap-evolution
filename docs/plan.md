@@ -47,7 +47,7 @@ We run the stages as follows:
 
 ## Where it runs
 
-The cloud box (2 cores) runs $t = 1$ and $2$, the references up to $t = 6$, and the first baselines. The cluster runs the rest from `cluster/` (`cluster/README.md`). Training and compiling at $t \ge 4$ is the expensive part: the Sep runs took up to 16 h for a single compile of a 61-sublayer cell. The MPS references cost seconds up to $t = 6$, minutes at $t = 8$ and about an hour per input at $t = 10$.
+On 6 Oct the cloud box (2 cores) ran SNAP at $t = 1$ (three budgets) and $t = 2$ (two budgets) for both models and one $t = 4$ point for model B, the references up to $t = 6$, and the baselines at $t = 1$ and 2 for both models and $t = 4$ for model B (`docs/validation.md`). The cluster runs the rest from `cluster/` (`cluster/README.md`). Training and compiling at $t \ge 4$ is the expensive part. The Sep runs took up to 16 h for a single compile of a 61-sublayer cell. The MPS references cost seconds up to $t = 6$ and minutes at $t = 8$. At $t = 10$ one input needs bond dimension 448 at cutoff $10^{-10}$ and took 28 min on a shared core, and more at the production cutoff $10^{-12}$.
 
 ## What we report per point
 
