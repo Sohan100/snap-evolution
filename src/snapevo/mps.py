@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import time
 from pathlib import Path
 
@@ -125,7 +126,7 @@ class MPS:
     def save(self, path: Path, meta: dict) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + ".tmp.npz")
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp.npz")
         np.savez(tmp, meta=np.array(json.dumps({**meta, "discarded": self.discarded, "chi_peak": self.chi_peak,
                                                 "chi_max": self.chi_max, "cutoff": self.cutoff,
                                                 "center": self.center})),

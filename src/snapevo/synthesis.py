@@ -24,6 +24,7 @@ import math
 import os
 import sys
 import threading
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 
@@ -35,6 +36,31 @@ __all__ = ["KN_DIR", "kn_law", "kn_cost", "kn_eps", "synthesize", "unitary_diamo
 
 KN_DIR = "kliuchnikov_nonmixed_2026-10-05"
 _lock = threading.Lock()
+
+
+@contextmanager
+def _cache_lock(path: Path):
+    """Hold the cache across threads and processes (flock on a side file).
+
+    Many jobs share one cache on a cluster. Where the file system has no flock
+    the lock is skipped. Writes are still atomic, so the worst case is a lost
+    entry that gets synthesized again.
+    """
+    with _lock:
+        try:
+            import fcntl
+            fh = open(path.with_name(path.name + ".lock"), "a")
+        except (ImportError, OSError):
+            yield
+            return
+        try:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX)
+            except OSError:
+                pass
+            yield
+        finally:
+            fh.close()
 
 
 @lru_cache(maxsize=1)
@@ -95,31 +121,35 @@ def synthesize(theta: float, eps: float, use_cache: bool = True) -> dict:
     Returns a dict with expected_t, t_v, t_b, p, theta_s (the success-branch
     angle, on theta's branch), d0 = D(U0, Rz(theta)), d1 = D(U1, Rz(theta)) and
     d_branch = D(U1, U0), the error of the fallback relative to the success branch.
+    Entries synthesized since 7 Oct 2026 also keep the branch unitaries U0 and U1
+    (U1 is None when the protocol never falls back), as [re, im] pairs.
     """
     key = _key(theta, eps)
     path = _cache_path()
     if use_cache:
-        with _lock:
+        with _cache_lock(path):
             cache = io.read_json(path) if path.exists() else {}
         if key in cache:
             return _unwrap(cache[key], theta)
-    # Isaac's synthesize() prices at theta and rebuilds at theta % 2 pi; for some negative
-    # angles the two disagree and its own check fails (e.g. -0.4429453 at 1e-4). Passing
-    # theta in [0, 2 pi) makes both the same angle; theta_s is unwrapped below.
-    r = _module().synthesize(theta % (2 * math.pi), eps)
-    U0 = np.array([[complex(*z) for z in row] for row in r["unitaries"]["U0"]])
+    # Isaac's synthesize() runs best_protocol and then searches again to rebuild the gate
+    # words, which we do not use. Calling best_protocol directly gives the same protocol and
+    # branch unitaries in about half the time. Its synthesize() also failed its own check for
+    # some negative angles (e.g. -0.4429453 at 1e-4), so theta goes in as theta mod 2 pi, and
+    # theta_s is unwrapped below.
+    _module()
+    import kliuchnikov_fallback as kf            # vendored next to synthesize.py
+    r = kf.best_protocol(theta % (2 * math.pi), eps, q_options=(0.99, 0.95, 0.9), split=0.1)
+    U0 = r["branches"][0][1]
+    U1 = r["branches"][1][1] if len(r["branches"]) > 1 else None
     theta_s = cmath.phase(U0[1, 1]) - cmath.phase(U0[0, 0])
-    if r["unitaries"]["U1"] is not None:
-        U1 = np.array([[complex(*z) for z in row] for row in r["unitaries"]["U1"]])
-        d_branch = unitary_diamond(U0, U1)
-    else:
-        d_branch = 0.0
+    d_branch = unitary_diamond(U0, U1) if U1 is not None else 0.0
+    mat = lambda M: None if M is None else [[[float(z.real), float(z.imag)] for z in row] for row in M]
     out = {"theta": math.remainder(theta, 2 * math.pi), "eps": eps,
-           "expected_t": r["expected_t"], "t_v": r["t_v"], "t_b": r["t_b"], "p": r["p"],
-           "theta_s": theta_s, "d0": r["diamond_success"], "d1": r["diamond_fallback"],
-           "d_branch": d_branch, "bound": r["diamond_bound"]}
+           "expected_t": float(r["expected_t"]), "t_v": int(r["t_v"]), "t_b": int(r["t_b"]), "p": float(r["p"]),
+           "theta_s": theta_s, "d0": float(r["d0"]), "d1": float(r["d1"]),
+           "d_branch": d_branch, "bound": float(r["bound"]), "U0": mat(U0), "U1": mat(U1)}
     if use_cache:
-        with _lock:
+        with _cache_lock(path):
             cache = io.read_json(path) if path.exists() else {}
             cache[key] = out
             io.write_json(path, cache, indent=None)

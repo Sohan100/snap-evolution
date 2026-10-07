@@ -13,7 +13,7 @@ python -m venv .venv
 .venv\Scripts\activate            (on Linux or macOS: source .venv/bin/activate)
 pip install -e .[test]
 python -m snapevo verify-library  (independent check of the library file, ~30 s)
-pytest                            (28 tests, ~2 min)
+pytest                            (29 tests, ~2 min)
 ```
 
 ## Run one point

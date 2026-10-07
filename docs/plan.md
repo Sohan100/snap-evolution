@@ -40,7 +40,7 @@ We run the stages as follows:
 3. **Realize** (`snapevo realize`). Lattice angles are priced on the $F$ grid, stragglers are synthesized with KN, and the edge rotations are fitted and synthesized.
 4. **References** (`snapevo reference`). MPS of $e^{-iHt}$ on the 8 inputs at $N = 100$, cached per model and time and shared by every circuit.
 5. **Evaluate** (`snapevo evaluate`). MPS of the circuit on the same inputs, the infidelity with its error bars, the fallback bound, and $F$.
-6. **Baseline** (`snapevo baseline-scan --evaluate`). Product formulas of order 2 and 4 with KN, screened by ring $C$, then the Pareto front evaluated like SNAP.
+6. **Baseline** (`snapevo baseline-scan --evaluate --targets`). Product formulas of order 1, 2 and 4 with KN, screened by ring $C$, then the point of the Pareto front nearest each budget evaluated like SNAP.
 7. **End-to-end** (with David, not in this repo yet). The dynamical structure factor on the 100-site chain, compiled circuit against exact evolution.
 
 `snapevo point` runs stages 2, 3 and 5. `snapevo report` prints one model and time.

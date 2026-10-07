@@ -142,7 +142,7 @@ def evaluate_circuit(circuit: Layered, edges: dict | None, pricing: dict, rotati
     floor = per[labels[-1]]["infid_total"]
     choice = next(lab for lab in labels if per[lab]["infid_total"] <= (1.0 + f_tol) * floor)
     best = per[choice]
-    share = (best["infid_total"] - m["infid"]) / best["infid_total"] if best["infid_total"] > 0 else 0.0
+    share = max(0.0, (best["infid_total"] - m["infid"]) / best["infid_total"]) if best["infid_total"] > 0 else 0.0
     rot = rotations_per_qubit + E["n_rotations"] / N
     out = {"N": N, "mps": m, "C_ring": C, "infid_ring_pred": 1.0 - (1.0 - C) ** N, "per_F": per, "F": choice,
            "infid": m["infid"], "infid_total": best["infid_total"], "fallback_share": share,

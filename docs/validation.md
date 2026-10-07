@@ -185,7 +185,7 @@ A longer check the same day, in the claude.ai project doc `rz_library_corrected_
 - The $2k-2$ rule holds for all 25,550 $L = 10, 11$ gadgets as well.
 - The zip carries a stale `.pyc` of the old builder, which has identical function bytecode and was dropped here.
 
-## Tests (`pytest`, 28 tests, about 2 min)
+## Tests (`pytest`, 29 tests, about 2 min)
 
 The suite checks the following:
 
@@ -206,5 +206,5 @@ The suite checks the following:
 - The early stop of the training ladder
 - Affine extrapolation
 - The order-2 Trotter layout
-- KN against its README example and the cache
+- KN against its README example and the cache, and the cache lock across processes
 - A small compile that meets its budget

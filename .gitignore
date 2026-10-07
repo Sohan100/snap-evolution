@@ -9,5 +9,6 @@ runs/**/ref/
 runs/logs/
 *.ckpt.pkl
 *.tmp
+*.lock
 *.tmp.npz
 cluster/logs/
