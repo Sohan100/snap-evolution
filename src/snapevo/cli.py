@@ -11,6 +11,8 @@
     crosscheck       small-ring metrics of a realized point: op norm, diamond, process fidelity (crosscheck.py)
     report           table of every evaluated point of a model and time
     summary          one CSV row per evaluated point, every model and time (runs/summary.csv)
+    plot             T per qubit and T per rotation against the per-site infidelity at N = 100 (runs/figures/)
+    compare          SNAP against the baseline at equal per-site infidelity, as a markdown table
     verify-library   independent check of the corrected gadget file (library_check.py)
 
 Files go to runs/<model tag>/t<t>/ (io.py); cached MPS references to its ref/ folder.
@@ -166,6 +168,11 @@ def cmd_evaluate(args, D: int | None = None) -> dict:
 
 
 def cmd_point(args) -> None:
+    _model, _cell, d = _ctx(args)
+    done = sorted(d.glob(f"eval_{io.budget_tag(args.budget)}_D*.json"))
+    if done and not args.fresh and not args.D:
+        _log(f"point: {done[0].name} exists (use --fresh to redo)")
+        return
     D, compiled = cmd_compile(args)
     if compiled is None:
         return
@@ -211,25 +218,36 @@ def cmd_baseline(args) -> None:
 
 
 def cmd_baseline_scan(args) -> None:
-    from snapevo.baseline import scan
+    from snapevo.baseline import SCAN_VERSION, scan
     model, _cell, d = _ctx(args)
     path = d / "baseline_scan.json"
-    res = io.read_json(path) if path.exists() and not args.fresh else scan(model, args.t, log=_log)
-    io.write_json(path, res)
+    res = io.read_json(path) if path.exists() and not args.fresh else None
+    if res is not None and res.get("version") != SCAN_VERSION:
+        _log("baseline-scan: the cached scan is from an older version, scanning again")
+        res = None
+    if res is None:
+        res = scan(model, args.t, log=_log)
+        io.write_json(path, res)
     lo, hi = (float(v) for v in args.c_range.split(","))
-    todo = [p for p in res["front"] if lo <= p["C"] <= hi]
+    fronts = {"C": [p for p in res["front"] if lo <= p["C"] <= hi],                  # success branch
+              "C_bound": [p for p in res["front_bound"] if lo <= p["C_bound"] <= hi]}  # with fallbacks
+    todo = []
     if args.targets:
         import math
-        picked = []
         for c in (float(v) for v in args.targets.split(",")):
-            best = min(todo, key=lambda p: abs(math.log(p["C"] / c))) if todo else None
-            if best is not None and best not in picked:
-                picked.append(best)
-        todo = picked
-    _log(f"baseline-scan: {len(res['points'])} points, front of {len(res['front'])}, "
-         f"{len(todo)} to evaluate")
+            for key, front in fronts.items():
+                if front:
+                    best = min(front, key=lambda p: abs(math.log(max(p[key], 1e-300) / c)))
+                    if best not in todo:
+                        todo.append(best)
+    else:
+        for front in fronts.values():
+            todo += [p for p in front if p not in todo]
+    _log(f"baseline-scan: {len(res['points'])} points, fronts of {len(res['front'])} (success branch) and "
+         f"{len(res['front_bound'])} (with fallbacks), {len(todo)} to evaluate")
     for p in todo:
-        _log(f"  front: order {p['order']}, r = {p['steps']}, eps {p['eps']:.0e}: C {p['C']:.3e}, T/q {p['Tq']:.1f}")
+        _log(f"  order {p['order']}, r = {p['steps']}, eps {p['eps']:.0e}: C {p['C']:.3e}, "
+             f"with fallbacks {p['C_bound']:.3e}, T/q {p['Tq']:.1f}")
     if args.evaluate:
         for p in todo:
             if (d / f"baseline_o{p['order']}_r{p['steps']}_e{p['eps']:.0e}.json").exists() and not args.fresh:
@@ -294,12 +312,13 @@ def cmd_summary(args) -> None:
             continue
         m = e["mps"]
         snap = p.name.startswith("eval_")
+        c_total = 1.0 - (1.0 - min(e["infid_total"], 1.0)) ** (1.0 / e["N"])
         rows.append({"model": p.parent.parent.name, "t": e["t"], "method": "snap" if snap else "baseline",
                      "budget": e.get("budget", ""), "D": e.get("D", ""), "order": e.get("order", ""),
                      "steps": e.get("steps", ""), "eps": e.get("eps", ""), "F": e["F"], "N": e["N"],
                      "states": m["states"][1], "stderr": m["stderr"], "trunc_rel": m["trunc_rel"],
                      "trunc_check": m.get("trunc_check", {}).get("rel_change", ""), "chi_peak": m["chi_peak"],
-                     **{k: e.get(k, "") for k in _SUMMARY_KEYS},
+                     **{k: e.get(k, "") for k in _SUMMARY_KEYS}, "c_total": c_total,
                      **{k: e.get(k, "") for k in ("n_free", "n_t", "n_rus", "n_kn")}})
     out = base / "summary.csv"
     with out.open("w", newline="") as fh:
@@ -307,6 +326,129 @@ def cmd_summary(args) -> None:
         w.writeheader()
         w.writerows(rows)
     print(f"{len(rows)} points -> {out}")
+
+
+def _envelope(pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Lower envelope of (infidelity, T) points: each kept point beats every cheaper one in infidelity."""
+    env, best = [], float("inf")
+    for x, y in sorted(pts, key=lambda p: (p[1], p[0])):
+        if x < best:
+            env.append((x, y))
+            best = x
+    return sorted(env)
+
+
+def _interp(env: list[tuple[float, float]], x: float) -> float | None:
+    """T on the envelope at infidelity x, log-log between neighbours; None outside its range."""
+    import math
+    if not env or x < env[0][0] or x > env[-1][0]:
+        return None
+    for (x0, y0), (x1, y1) in zip(env, env[1:]):
+        if x0 <= x <= x1:
+            if x1 == x0:
+                return min(y0, y1)
+            f = math.log(x / x0) / math.log(x1 / x0)
+            return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+    return env[0][1]
+
+
+def cmd_compare(args) -> None:
+    """SNAP against the baseline at equal per-site infidelity, success branch and with the fallback bound.
+
+    The baseline's T is interpolated (log-log) along the lower envelope of its
+    evaluated points, and left blank where a SNAP point falls outside that range.
+    """
+    import csv
+    import os
+    from pathlib import Path
+    cmd_summary(args)
+    base = Path(os.environ.get("SNAPEVO_RUNS", io.repo_root() / "runs"))
+    rows = list(csv.DictReader((base / "summary.csv").open()))
+    names = {"xxz_d0.25_hx1.6": "A", "xxz_d0.25_hx0": "B"}
+    fmt = lambda v, f: "" if v is None else format(v, f)
+    print("| model | t | budget | D | c | SNAP T/q | base T/q | ratio | c with fallbacks | base T/q | ratio |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
+    for m in ("xxz_d0.25_hx1.6", "xxz_d0.25_hx0"):
+        for t in sorted({float(r["t"]) for r in rows if r["model"] == m}):
+            sel = [r for r in rows if r["model"] == m and float(r["t"]) == t]
+            base_pts = [r for r in sel if r["method"] == "baseline" and float(r["Tq"]) > 0]
+            env_s = _envelope([(float(r["c_site"]), float(r["Tq"])) for r in base_pts])
+            env_b = _envelope([(float(r["c_total"]), float(r["Tq"])) for r in base_pts
+                               if float(r["infid_total"]) < 1.0])       # a bound at 1 says nothing
+            for r in sorted((r for r in sel if r["method"] == "snap"), key=lambda r: -float(r["budget"])):
+                tq, cs, ct = float(r["Tq"]), float(r["c_site"]), float(r["c_total"])
+                bs, bb = _interp(env_s, cs), _interp(env_b, ct)
+                print(f"| {names.get(m, m)} | {t:g} | {float(r['budget']):.0e} | {r['D']} | {cs:.2e} | {tq:.1f} | "
+                      f"{fmt(bs, '.1f')} | {fmt(bs / tq if bs and tq > 0 else None, '.2f')} | {ct:.2e} | "
+                      f"{fmt(bb, '.1f')} | {fmt(bb / tq if bb and tq > 0 else None, '.2f')} |")
+
+
+_SNAP_COLOR, _BASE_COLOR, _INK, _MUTED = "#2a78d6", "#eb6834", "#0b0b0b", "#52514e"
+
+
+def cmd_plot(args) -> None:
+    """One panel per model and time: SNAP and the KN baseline, T against the per-site infidelity.
+
+    The x axis is c = 1 - mean F^(1/N) from the 100-site MPS runs, so that the
+    loose budgets, where 1 - F at N = 100 is close to 1, stay apart.
+    1 - F = 1 - (1 - c)^100 is about 100 c below 1e-3. The *_bound figures use
+    the infidelity with the fallback bound instead of the success branch. The
+    baseline curve is the lower envelope of its evaluated points, and points
+    with no T at all (a Clifford circuit) are left out of the log axes, and so
+    are points whose fallback bound reaches 1 from the *_bound figures.
+    """
+    import csv
+    import os
+    from pathlib import Path
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    cmd_summary(args)
+    base = Path(os.environ.get("SNAPEVO_RUNS", io.repo_root() / "runs"))
+    rows = list(csv.DictReader((base / "summary.csv").open()))
+    names = {"xxz_d0.25_hx1.6": "A", "xxz_d0.25_hx0": "B"}
+    models = [m for m in ("xxz_d0.25_hx1.6", "xxz_d0.25_hx0") if any(r["model"] == m for r in rows)]
+    times = sorted({float(r["t"]) for r in rows})
+    out = base / "figures"
+    out.mkdir(exist_ok=True)
+    xs = {"": ("c_site", r"per-site infidelity $c$ at $N = 100$, success branch"),
+          "_bound": ("c_total", r"per-site infidelity at $N = 100$ with the fallback bound")}
+    for suffix, (xkey, xlabel) in xs.items():
+        for key, label, fname in (("Tq", "T per qubit", "sweep_T_per_qubit"),
+                                  ("T_per_rotation", "T per rotation", "sweep_T_per_rotation")):
+            fig, axes = plt.subplots(len(models), len(times), figsize=(3.2 * len(times), 2.9 * len(models)),
+                                     squeeze=False, sharex=True, sharey=True)
+            for i, m in enumerate(models):
+                for j, t in enumerate(times):
+                    ax = axes[i][j]
+                    for method, color, marker, face in (("snap", _SNAP_COLOR, "o", _SNAP_COLOR),
+                                                        ("baseline", _BASE_COLOR, "s", "white")):
+                        pts = sorted(((float(r[xkey]), float(r[key])) for r in rows
+                                      if r["model"] == m and float(r["t"]) == t and r["method"] == method
+                                      and float(r[key]) > 0 and (xkey != "c_total" or float(r["infid_total"]) < 1.0)),
+                                     key=lambda p: p[0])
+                        if method == "baseline":             # lower envelope of the baseline points
+                            pts = _envelope(pts)
+                        if pts:
+                            ax.plot(*zip(*pts), color=color, lw=1.5, marker=marker, ms=4.5, mfc=face, mew=1.2,
+                                    label="SNAP" if method == "snap" else "Trotter + KN")
+                    ax.set_xscale("log")
+                    ax.set_yscale("log")
+                    ax.grid(True, which="major", color="#e4e3df", lw=0.6)
+                    ax.tick_params(colors=_MUTED, labelsize=8)
+                    for sp in ax.spines.values():
+                        sp.set_color("#c9c8c2")
+                    ax.set_title(f"model {names[m]}, $t = {t:g}$", fontsize=9, color=_INK)
+                    if i == len(models) - 1:
+                        ax.set_xlabel(xlabel, fontsize=8, color=_MUTED)
+                    if j == 0:
+                        ax.set_ylabel(label, fontsize=8, color=_MUTED)
+            axes[0][0].legend(fontsize=8, frameon=False)
+            fig.tight_layout()
+            for ext in ("png", "pdf"):
+                fig.savefig(out / f"{fname}{suffix}.{ext}", dpi=160)
+            plt.close(fig)
+            print(f"wrote {out / (fname + suffix)}.png and .pdf")
 
 
 def cmd_verify_library(args) -> None:
@@ -390,10 +532,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_baseline)
     p = sub.add_parser("baseline-scan", parents=[eval_opts], help="screen product formulas, MPS on the front")
     common(p)
-    p.add_argument("--c-range", default="1e-12,1", dest="c_range", help="ring C range of front points to run")
+    p.add_argument("--c-range", default="1e-12,1", dest="c_range",
+                   help="per-site range of front points to run (ring C, or with fallbacks for the second front)")
     p.add_argument("--evaluate", action="store_true", help="run the MPS evaluation of the front points")
     p.add_argument("--targets", default=None,
-                   help="comma-separated ring C values; evaluate only the front point nearest each")
+                   help="comma-separated per-site values; evaluate only the point of each front nearest each")
     p.add_argument("--fresh", action="store_true", help="redo the scan and the evaluations")
     p.set_defaults(func=cmd_baseline_scan)
     p = sub.add_parser("reference", parents=[eval_opts], help="build and cache the MPS references")
@@ -408,6 +551,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_report)
     p = sub.add_parser("summary", help="CSV of every evaluated point")
     p.set_defaults(func=cmd_summary)
+    p = sub.add_parser("plot", help="T against the per-site infidelity at N = 100 (needs matplotlib)")
+    p.set_defaults(func=cmd_plot)
+    p = sub.add_parser("compare", help="SNAP against the baseline at equal infidelity, as a markdown table")
+    p.set_defaults(func=cmd_compare)
     p = sub.add_parser("verify-library", help="independent check of the corrected gadget file")
     p.set_defaults(func=cmd_verify_library)
     return ap

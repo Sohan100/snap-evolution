@@ -10,9 +10,16 @@ ref/ caches and run logs are not:
     eval_b<budget>_D<D>.json         MPS infidelity at N = 100 and T counts (evaluate.py)
     xcheck_b<budget>_D<D>.json       small-ring cross-checks (crosscheck.py)
     baseline_o<order>_r<steps>_e<eps>.json   Trotter + KN baseline points (baseline.py, evaluate.py)
+    baseline_scan.json               the screened product formulas and their two fronts (baseline.py)
     ref/ref_N<N>_s<seed>_k<k>_*.npz  cached MPS of e^{-iHt} on each input (mps.py)
 
-Set ``SNAPEVO_RUNS`` to put runs somewhere else (for example off OneDrive).
+and, shared by all models and times,
+
+    kn_cache.json                    every KN synthesis so far, by angle and budget (synthesis.py)
+    summary.csv, figures/            all evaluated points and the sweep plots (snapevo summary, plot)
+
+Set ``SNAPEVO_RUNS`` to put runs somewhere else (for example off OneDrive). Files are written to a
+per-process temporary name and renamed, so parallel jobs never see half a file.
 """
 
 from __future__ import annotations
@@ -64,7 +71,7 @@ def _default(o):
 def write_json(path: Path, payload, indent: int | None = 1) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")    # one per process, then an atomic rename
     with tmp.open("w") as fh:
         json.dump(payload, fh, indent=indent, default=_default)
     os.replace(tmp, path)
