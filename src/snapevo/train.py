@@ -40,9 +40,23 @@ def load_cell(path: Path, D: int) -> tuple[np.ndarray, dict]:
     raise KeyError(f"{path} has no D={D}; available: {sorted(r['D'] for r in doc['results'])}")
 
 
+def _stalled(results: list[dict], D: int) -> bool:
+    """True when the floor at D fell by less than 2x from the deepest depth at least 4 below it."""
+    lower = [r for r in results if int(r["D"]) <= D - 4]
+    here = [r for r in results if int(r["D"]) == D]
+    if not lower or not here:
+        return False
+    return here[0]["C_train"] > 0.5 * max(lower, key=lambda r: r["D"])["C_train"]
+
+
 def train_ladder(model: XXZ, cell: Cell, t: float, depths: list[int], out: Path,
                  maxiter: int = 6000, log=print) -> Path:
-    """Train every depth in ``depths`` (ascending), resuming any already in ``out``."""
+    """Train every depth in ``depths`` (ascending), resuming any already in ``out``.
+
+    The ladder stops early once a depth's floor falls by less than 2x against the
+    deepest depth at least four sublayers below it, since deeper cells would then
+    cost more rotations for little gain.
+    """
     from snapevo.jaxcost import make_cost
 
     N = L_TRAIN
@@ -87,4 +101,7 @@ def train_ladder(model: XXZ, cell: Cell, t: float, depths: list[int], out: Path,
         results.sort(key=lambda r: r["D"])
         io.write_json(out, {**header, "results": results}, indent=None)
         prev = params
+        if _stalled(results, D):
+            log(f"D={D:2d}: floor fell by less than 2x over four sublayers, stopping the ladder")
+            break
     return Path(out)

@@ -185,7 +185,7 @@ A longer check the same day, in the claude.ai project doc `rz_library_corrected_
 - The $2k-2$ rule holds for all 25,550 $L = 10, 11$ gadgets as well.
 - The zip carries a stale `.pyc` of the old builder, which has identical function bytecode and was dropped here.
 
-## Tests (`pytest`, 27 tests, about 2 min)
+## Tests (`pytest`, 28 tests, about 2 min)
 
 The suite checks the following:
 
@@ -203,6 +203,7 @@ The suite checks the following:
 - The truncation error bar, MPS save and load, and the MPS evaluation against dense fidelities
 - The choice of the fallback cost F
 - ZYZ angles, the edge start point, and an edge fit that lowers the open-chain infidelity
+- The early stop of the training ladder
 - Affine extrapolation
 - The order-2 Trotter layout
 - KN against its README example and the cache

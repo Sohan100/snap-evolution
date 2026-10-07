@@ -29,14 +29,14 @@ David has not posted his Hamiltonian on Slack yet. If his convention differs, on
 
 ## The sweep
 
-Models A and B at $t = 1, 2, 4, 6, 8, 10$, with SNAP at training budgets $B = 10^{-4}, 10^{-5}, 10^{-6}$. In fidelity these are 99% to 99.99% at $N = 100$, since $1 - F \approx 100\,C$. Each point and each time also gets a baseline curve. `cluster/make_jobs.py` holds the grid, including the training depths per time.
+Models A and B at $t = 1, 2, 4, 6, 8, 10$, with SNAP at 15 training budgets in half decades from $B = 10^{-1}$ to $10^{-8}$ (Sohan, 7 Oct). Since $1 - F \approx 1 - (1 - B)^{100}$, the loose end has almost no fidelity left at $N = 100$ and the tight end reaches $1 - F \approx 10^{-6}$, past where the Sep runs hit the wall. The baseline front is evaluated at the point nearest each budget. `cluster/make_jobs.py` holds the grid, including the training depths per time, which start at $D = 2$ to 5 for the loose budgets and go to $D = 25$ ($t = 2$) up to $D = 81$ ($t = 10$) for the tight ones.
 
 ## Stages
 
 We run the stages as follows:
 
 1. **Train** a depth ladder per model and time on the 10-site ring (`snapevo train`). Each depth starts from Trotter, from the previous depth padded with identity sublayers, and from a random perturbation, and the best of the three is kept. The ladder stops when the floor no longer falls by at least 2x per four sublayers.
-2. **Compile** (`snapevo compile`). The depth is the shallowest one whose floor is at most $B/3$. The library is priced at $F = 22$ while compiling.
+2. **Compile** (`snapevo compile`). The depth is the shallowest one whose floor is at most $B/3$, or the deepest one if none is. A point whose floor is above $2B/3$ is skipped, since there is no room left to snap. The library is priced at $F = 22$ while compiling.
 3. **Realize** (`snapevo realize`). Lattice angles are priced on the $F$ grid, stragglers are synthesized with KN, and the edge rotations are fitted and synthesized.
 4. **References** (`snapevo reference`). MPS of $e^{-iHt}$ on the 8 inputs at $N = 100$, cached per model and time and shared by every circuit.
 5. **Evaluate** (`snapevo evaluate`). MPS of the circuit on the same inputs, the infidelity with its error bars, the fallback bound, and $F$.

@@ -4,7 +4,10 @@ __pycache__/
 .venv/
 .pytest_cache/
 .jax_cache/
-runs/
+# run results are tracked, but not caches, logs or checkpoints
+runs/**/ref/
+runs/logs/
 *.ckpt.pkl
 *.tmp
+*.tmp.npz
 cluster/logs/

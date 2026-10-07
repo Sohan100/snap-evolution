@@ -1,0 +1,12 @@
+python -m snapevo baseline-scan --model A --t 1
+python -m snapevo baseline-scan --model A --t 2
+python -m snapevo baseline-scan --model A --t 4
+python -m snapevo baseline-scan --model A --t 6
+python -m snapevo baseline-scan --model A --t 8
+python -m snapevo baseline-scan --model A --t 10
+python -m snapevo baseline-scan --model B --t 1
+python -m snapevo baseline-scan --model B --t 2
+python -m snapevo baseline-scan --model B --t 4
+python -m snapevo baseline-scan --model B --t 6
+python -m snapevo baseline-scan --model B --t 8
+python -m snapevo baseline-scan --model B --t 10
