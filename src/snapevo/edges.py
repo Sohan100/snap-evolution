@@ -13,6 +13,10 @@ single-qubit factor, the wrap gate with its coupling removed. For the
 zero-field cell at D = 11 this takes the boundary error from 4e-4 to below one
 bulk site's worth (docs/validation.md).
 
+After the fit, angles within 1e-2 of a multiple of pi/4 are set to it, closest
+first, while the fit infidelity rises by less than a tenth of one bulk site's
+worth in all. Those cost 0 or 1 T and need no synthesis.
+
 We keep the fitted edges only when they remove at least one bulk site's worth of
 error at N_fit (worth_it). Otherwise the open chain uses the cell's own factor,
 which costs nothing extra. Kept angles are synthesized with KN non-mixed, like
@@ -159,11 +163,42 @@ def fit_edges(circuit: Layered, model: XXZ, t: float, N_fit: int | None = None,
     v0 = f(x0)[0]
     res = minimize(f, x0, jac=True, method="L-BFGS-B",
                    options={"maxiter": maxiter, "ftol": 1e-3 * ring / N, "gtol": 1e-13})
-    out = {"N_fit": N, "states": list(states), "angles": res.x.tolist(), "infid_start": v0,
-           "infid_fit": float(res.fun), "infid_ring": ring, "nit": int(res.nit), "seconds": time.time() - t0}
+    x, v, n_snap = _snap_near_clifford_t(f, res.x, float(res.fun), 0.1 * ring / N)
+    out = {"N_fit": N, "states": list(states), "angles": x.tolist(), "infid_start": v0,
+           "infid_fit": v, "infid_fit_unsnapped": float(res.fun), "n_snapped": n_snap, "infid_ring": ring,
+           "nit": int(res.nit), "seconds": time.time() - t0}
     log(f"edges: N_fit = {N}, {x0.size} angles, infidelity {v0:.3e} -> {res.fun:.3e} "
-        f"(ring {ring:.3e}), {res.nit} iterations, {out['seconds']:.0f}s")
+        f"(ring {ring:.3e}), {res.nit} iterations, {n_snap} set to multiples of pi/4 ({v:.3e}), "
+        f"{out['seconds']:.0f}s")
     return out
+
+
+def _snap_near_clifford_t(f, x: np.ndarray, v: float, allowance: float, window: float = 1e-2):
+    """Set fitted angles to the nearest multiple of pi/4 while the fit infidelity allows it.
+
+    Many fitted angles sit within 1e-4 of 0 or pi/2: corrections the fit
+    barely needs. Synthesizing them costs as much as any other angle, and
+    KN's search is slow near multiples of pi/4. Angles within ``window`` of
+    one are tried from the closest, and a snap is kept while the total rise
+    of the fit infidelity stays below ``allowance`` (a tenth of one bulk
+    site's worth, see fit_edges). Returns the angles, the new infidelity and
+    the number of snaps.
+    """
+    x = np.array(x, dtype=float)
+    limit = v + allowance
+    offsets = [(abs(math.remainder(a, QUARTER)), i) for i, a in enumerate(x)]
+    n = 0
+    for off, i in sorted(offsets):
+        if off == 0.0:
+            continue
+        if off > window:
+            break
+        trial = x.copy()
+        trial[i] -= math.remainder(trial[i], QUARTER)
+        vt = f(trial)[0]
+        if vt <= limit:
+            x, v, n = trial, vt, n + 1
+    return x, v, n
 
 
 def worth_it(fit: dict) -> bool:
@@ -172,22 +207,30 @@ def worth_it(fit: dict) -> bool:
 
 
 def realize_edges(fit: dict, eps: float) -> dict:
-    """Synthesize the kept edge angles with KN at eps. Exact multiples of pi/4 cost 0 or 1 T.
+    """Synthesize the kept edge angles with KN at eps. Multiples of pi/4 cost 0 or 1 T.
 
-    When the fit is not worth it, the record says so (use = False) and the open
-    chain keeps the cell's own single-qubit factor at no extra cost.
+    An angle within diamond distance eps of a multiple of pi/4 is set to it,
+    since that is cheaper than any KN circuit and as accurate as the budget
+    asks. Many fitted edge angles are like that (corrections of 1e-5 near 0 or
+    pi/2), and KN's search is very slow on them. When the fit is not worth it,
+    the record says so (use = False) and the open chain keeps the cell's own
+    single-qubit factor at no extra cost.
     """
     if not worth_it(fit):
         return {**fit, "use": False, "eps": eps, "angles_real": None, "kn": {}, "n_rotations": 0,
-                "n_kn": 0, "T_total": 0.0, "ledger_total": 0.0, "ledger2_total": 0.0}
+                "n_kn": 0, "n_clifford_t": 0, "T_total": 0.0, "ledger_total": 0.0, "ledger2_total": 0.0}
     x = np.asarray(fit["angles"], dtype=float)
     x_real = x.copy()
     T = ledger = ledger2 = 0.0
     kn = {}
+    n_exact = 0
     for i, theta in enumerate(x):
-        k = math.remainder(theta, 2 * math.pi) / QUARTER
-        if abs(k - round(k)) < 1e-12:
-            T += 0.0 if round(k) % 2 == 0 else 1.0
+        rem = math.remainder(theta, 2 * math.pi)
+        k = round(rem / QUARTER)
+        if 2.0 * abs(math.sin((rem - k * QUARTER) / 2.0)) <= eps:
+            x_real[i] = theta - rem + k * QUARTER
+            T += 0.0 if k % 2 == 0 else 1.0
+            n_exact += 1
             continue
         r = synthesize(theta, eps)
         kn[str(i)] = r
@@ -196,4 +239,4 @@ def realize_edges(fit: dict, eps: float) -> dict:
         ledger += (1.0 - r["p"]) * r["d_branch"]
         ledger2 += (1.0 - r["p"]) * r["d_branch"] ** 2
     return {**fit, "use": True, "eps": eps, "angles_real": x_real.tolist(), "kn": kn, "n_rotations": int(x.size),
-            "n_kn": len(kn), "T_total": T, "ledger_total": ledger, "ledger2_total": ledger2}
+            "n_kn": len(kn), "n_clifford_t": n_exact, "T_total": T, "ledger_total": ledger, "ledger2_total": ledger2}

@@ -25,6 +25,7 @@ per-process temporary name and renamed, so parallel jobs never see half a file.
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 import os
 from pathlib import Path
 
@@ -76,6 +77,35 @@ def write_json(path: Path, payload, indent: int | None = 1) -> Path:
         json.dump(payload, fh, indent=indent, default=_default)
     os.replace(tmp, path)
     return path
+
+
+@contextmanager
+def claim(path: Path):
+    """Claim a file for this process while working on it: yields False if another process holds it.
+
+    A non-blocking flock on a side file (path + ".lock"). Parallel jobs that
+    could pick the same file (two budgets whose nearest baseline point is the
+    same) then skip it instead of doing the work twice. Without flock it
+    always yields True.
+    """
+    try:
+        import fcntl
+    except ImportError:
+        yield True
+        return
+    fh = open(f"{path}.lock", "a")
+    try:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        except OSError:                          # no flock on this file system
+            yield True
+            return
+        yield True
+    finally:
+        fh.close()
 
 
 def read_json(path: Path):
