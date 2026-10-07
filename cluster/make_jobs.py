@@ -2,16 +2,21 @@
 
     python cluster/make_jobs.py
 
-writes cluster/jobs/{train,reference,scan,points,baselines}.txt. Edit the grid
+writes cluster/jobs/{train,reference,scan,points,baselines,samples}.txt. Edit the grid
 below and rerun to change the sweep. submit.sh sends the lists to SLURM as job
 arrays with dependencies, and run_local.sh runs one list in order on any machine.
 
-The SNAP points cover 15 training budgets, half decades from 1e-1 to 1e-8. A
-point whose ladder never gets its floor below two thirds of the budget is
-skipped at compile time, so the tight end at large t needs the ladder to reach
-deep enough first. The baseline scan of each model and time runs once, and its
-Pareto front is then evaluated by MPS at the point nearest each budget, one job
-per budget.
+The SNAP points cover 15 training budgets, half decades from 1e-1 to 1e-8, each
+compiled at two depths: the shallowest whose floor is at most a third of the
+budget, and the shallowest whose floor is at most a thirtieth (or the deepest).
+The deeper cell has more rotations, but with more room under the budget they
+come out much cheaper, and at tight budgets it usually wins (model B at t = 1,
+1e-7: 142 T per qubit at D = 15 against 216 at D = 11). A depth whose floor
+leaves less than a third of the budget for snapping is skipped at compile time,
+so the tight end at large t needs the ladder to reach deep enough first. The baseline scan of each model and time runs once, and its
+Pareto fronts are then evaluated by MPS at the points nearest each budget, one
+job per budget, and the sample jobs draw the fallback branches of those points
+and of the SNAP points of the same budget (fallbacks.py).
 
 Every command uses the default MPS settings (N = 100, 8 inputs, seed 2026,
 dt 0.2, cutoff 1e-12, chi_max 1024), so the points and the baselines find the
@@ -36,6 +41,8 @@ DEPTHS = {                                   # training ladders, each stops earl
 }
 STATES = 8
 SPLIT_FROM = 6                               # from this t on, one reference job per input
+SAMPLES = {1: 4, 2: 4, 4: 4, 6: 2, 8: 2, 10: 2}   # fallback draws per input, each one more circuit MPS
+MARGINS = "3,30"   # one compile at the shallowest depth with floor <= B/3 and one with floor <= B/30
 
 
 def main() -> None:
@@ -44,9 +51,12 @@ def main() -> None:
         "train": [f"{py} train --model {m} --t {t} --depths {DEPTHS[t]}" for m in MODELS for t in TIMES],
         "reference": [],
         "scan": [f"{py} baseline-scan --model {m} --t {t}" for m in MODELS for t in TIMES],
-        "points": [f"{py} point --model {m} --t {t} --budget {b}" for m in MODELS for t in TIMES for b in BUDGETS],
+        "points": [f"{py} point --model {m} --t {t} --budget {b} --margins {MARGINS}"
+                   for m in MODELS for t in TIMES for b in BUDGETS],
         "baselines": [f"{py} baseline-scan --model {m} --t {t} --evaluate --targets {b}"
                       for m in MODELS for t in TIMES for b in BUDGETS],
+        "samples": [f"{py} sample --model {m} --t {t} --targets {b} --budget {b} --samples {SAMPLES[t]}"
+                    for m in MODELS for t in TIMES for b in BUDGETS],
     }
     for m in MODELS:
         for t in TIMES:

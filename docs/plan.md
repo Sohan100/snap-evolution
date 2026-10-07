@@ -36,7 +36,7 @@ Models A and B at $t = 1, 2, 4, 6, 8, 10$, with SNAP at 15 training budgets in h
 We run the stages as follows:
 
 1. **Train** a depth ladder per model and time on the 10-site ring (`snapevo train`). Each depth starts from Trotter, from the previous depth padded with identity sublayers, and from a random perturbation, and the best of the three is kept. The ladder stops when the floor no longer falls by at least 2x per four sublayers.
-2. **Compile** (`snapevo compile`). The depth is the shallowest one whose floor is at most $B/3$, or the deepest one if none is. A point whose floor is above $2B/3$ is skipped, since there is no room left to snap. The library is priced at $F = 22$ while compiling.
+2. **Compile** (`snapevo compile`). Each budget is compiled at two depths, the shallowest whose floor is at most $B/3$ and the shallowest whose floor is at most $B/30$, or the deepest if none is (`snapevo point --margins 3,30`). The deeper cell has more rotations, but with more room under the budget they come out much cheaper, and at tight budgets it usually wins (`docs/validation.md`). A depth whose floor is above $2B/3$ is skipped, since there is no room left to snap. The library is priced at $F = 22$ while compiling.
 3. **Realize** (`snapevo realize`). Lattice angles are priced on the $F$ grid, stragglers are synthesized with KN, and the edge rotations are fitted and synthesized.
 4. **References** (`snapevo reference`). MPS of $e^{-iHt}$ on the 8 inputs at $N = 100$, cached per model and time and shared by every circuit.
 5. **Evaluate** (`snapevo evaluate`). MPS of the circuit on the same inputs, the infidelity with its error bars, the fallback bound, and $F$.
@@ -47,7 +47,7 @@ We run the stages as follows:
 
 ## Where it runs
 
-On 6 Oct the cloud box (2 cores) ran SNAP at $t = 1$ (three budgets) and $t = 2$ (two budgets) for both models and one $t = 4$ point for model B, the references up to $t = 6$, and the baselines at $t = 1$ and 2 for both models and $t = 4$ for model B (`docs/validation.md`). The cluster runs the rest from `cluster/` (`cluster/README.md`). Training and compiling at $t \ge 4$ is the expensive part. The Sep runs took up to 16 h for a single compile of a 61-sublayer cell. The MPS references cost seconds up to $t = 6$ and minutes at $t = 8$. At $t = 10$ one input needs bond dimension 448 at cutoff $10^{-10}$ and took 28 min on a shared core, and more at the production cutoff $10^{-12}$.
+On 6 Oct the cloud box (2 cores) ran SNAP at $t = 1$ (three budgets) and $t = 2$ (two budgets) for both models and one $t = 4$ point for model B, and the references up to $t = 6$. On 7 Oct it ran the budget sweep, all 15 budgets at $t = 1$ and $10^{-1}$ to $3\times10^{-7}$ at $t = 2$ for both models, deeper compiles of the tight $t = 1$ budgets, the rebuilt baseline at all 15 budgets for $t = 1$ and 2 and near $10^{-4}$ for model B at $t = 4$, and the fallback draws of all of it (`docs/validation.md`). The cluster runs the rest from `cluster/` (`cluster/README.md`). Training and compiling at $t \ge 4$ is the expensive part. The Sep runs took up to 16 h for a single compile of a 61-sublayer cell. The MPS references cost seconds up to $t = 6$ and minutes at $t = 8$. At $t = 10$ one input needs bond dimension 448 at cutoff $10^{-10}$ and took 28 min on a shared core, and more at the production cutoff $10^{-12}$.
 
 ## What we report per point
 

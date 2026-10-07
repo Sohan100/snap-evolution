@@ -7,6 +7,7 @@
     point            compile, realize and evaluate in one go
     baseline         one product-formula + KN point, evaluated the same way (baseline.py)
     baseline-scan    product formulas + KN screened on the ring, then the Pareto front by MPS
+    sample           draw the KN fallbacks of the evaluated points (fallbacks.py)
     reference        build and cache the MPS references e^{-iHt}|phi_k> (mps.py)
     crosscheck       small-ring metrics of a realized point: op norm, diamond, process fidelity (crosscheck.py)
     report           table of every evaluated point of a model and time
@@ -125,7 +126,8 @@ def _add_edges(rec: dict, model, cell, t: float, N_fit: int | None) -> dict:
     fit = fit_edges(Layered.brickwork(cell, rec["angles_real"]), model, t, N_fit=N_fit, log=_log)
     rec["edges"] = E = realize_edges(fit, edge_eps(rec["budget"]))
     if E["use"]:
-        _log(f"edges: kept, {E['n_kn']} KN rotations at eps {E['eps']:.0e}, {E['T_total']:.0f} T in total")
+        _log(f"edges: kept, {E['n_kn']} KN rotations at eps {E['eps']:.0e} and {E.get('n_clifford_t', 0)} "
+             f"multiples of pi/4, {E['T_total']:.0f} T in total")
     else:
         _log("edges: the fit gains less than one bulk site's worth; keeping the cell's own factor")
     return rec
@@ -168,16 +170,31 @@ def cmd_evaluate(args, D: int | None = None) -> dict:
 
 
 def cmd_point(args) -> None:
+    """Compile, realize and evaluate one budget, at one depth per floor margin (--margins).
+
+    The shallowest depth that fits is not always the cheapest: a deeper cell
+    leaves more room under the budget, and its rotations come out cheaper.
+    Each margin m picks the shallowest depth whose floor is at most budget/m.
+    A depth that already has its evaluation is skipped.
+    """
+    from snapevo.train import cell_records
     _model, _cell, d = _ctx(args)
-    done = sorted(d.glob(f"eval_{io.budget_tag(args.budget)}_D*.json"))
-    if done and not args.fresh and not args.D:
-        _log(f"point: {done[0].name} exists (use --fresh to redo)")
-        return
-    D, compiled = cmd_compile(args)
-    if compiled is None:
-        return
-    cmd_realize(args, D)
-    cmd_evaluate(args, D)
+    if args.D:
+        depths = [args.D]
+    else:
+        records = cell_records(d / "cells.json")
+        margins = [float(v) for v in (args.margins or f"{args.floor_margin:g}").split(",")]
+        depths = sorted({_pick_depth(records, args.budget, m) for m in margins})
+    for D in depths:
+        if (d / f"eval_{_stem(args.budget, D)}.json").exists() and not args.fresh:
+            _log(f"point: eval_{_stem(args.budget, D)}.json exists (use --fresh to redo)")
+            continue
+        sub = argparse.Namespace(**{**vars(args), "D": D})
+        D_, compiled = cmd_compile(sub)
+        if compiled is None:
+            continue
+        cmd_realize(sub, D_)
+        cmd_evaluate(sub, D_)
 
 
 def cmd_crosscheck(args) -> dict:
@@ -217,6 +234,26 @@ def cmd_baseline(args) -> None:
     _baseline_point(args, model, d, args.order, args.steps, args.eps, args.crosscheck)
 
 
+def _pick_front(res: dict, c_range: str, targets: str | None) -> list[dict]:
+    """Front points to run: within c_range, and if targets are given the point of each front nearest each."""
+    import math
+    lo, hi = (float(v) for v in c_range.split(","))
+    fronts = {"C": [p for p in res["front"] if lo <= p["C"] <= hi],                  # success branch
+              "C_bound": [p for p in res["front_bound"] if lo <= p["C_bound"] <= hi]}  # with fallbacks
+    todo = []
+    if targets:
+        for c in (float(v) for v in targets.split(",")):
+            for key, front in fronts.items():
+                if front:
+                    best = min(front, key=lambda p: abs(math.log(max(p[key], 1e-300) / c)))
+                    if best not in todo:
+                        todo.append(best)
+    else:
+        for front in fronts.values():
+            todo += [p for p in front if p not in todo]
+    return todo
+
+
 def cmd_baseline_scan(args) -> None:
     from snapevo.baseline import SCAN_VERSION, scan
     model, _cell, d = _ctx(args)
@@ -228,21 +265,7 @@ def cmd_baseline_scan(args) -> None:
     if res is None:
         res = scan(model, args.t, log=_log)
         io.write_json(path, res)
-    lo, hi = (float(v) for v in args.c_range.split(","))
-    fronts = {"C": [p for p in res["front"] if lo <= p["C"] <= hi],                  # success branch
-              "C_bound": [p for p in res["front_bound"] if lo <= p["C_bound"] <= hi]}  # with fallbacks
-    todo = []
-    if args.targets:
-        import math
-        for c in (float(v) for v in args.targets.split(",")):
-            for key, front in fronts.items():
-                if front:
-                    best = min(front, key=lambda p: abs(math.log(max(p[key], 1e-300) / c)))
-                    if best not in todo:
-                        todo.append(best)
-    else:
-        for front in fronts.values():
-            todo += [p for p in front if p not in todo]
+    todo = _pick_front(res, args.c_range, args.targets)
     _log(f"baseline-scan: {len(res['points'])} points, fronts of {len(res['front'])} (success branch) and "
          f"{len(res['front_bound'])} (with fallbacks), {len(todo)} to evaluate")
     for p in todo:
@@ -253,6 +276,66 @@ def cmd_baseline_scan(args) -> None:
             if (d / f"baseline_o{p['order']}_r{p['steps']}_e{p['eps']:.0e}.json").exists() and not args.fresh:
                 continue
             _baseline_point(args, model, d, p["order"], p["steps"], p["eps"])
+
+
+def cmd_sample(args) -> None:
+    """Draw the KN fallbacks of every evaluated point (fallbacks.py) and store the result in its file.
+
+    Baseline points get infid_sampled, the drawn average. SNAP points get the
+    drawn average of their KN stragglers and edges with the library gadgets'
+    bound on top (snap_total), at the F their evaluation chose. A SNAP point
+    with no KN rotation needs no draws.
+    """
+    from snapevo.baseline import realize_baseline, trotter_circuit
+    from snapevo.fallbacks import sample_baseline, sample_snap, snap_total
+    model, cell, d = _ctx(args)
+    kw = dict(N=args.N, states=(args.seed, args.states), samples=args.samples, dt=args.dt, chi_max=args.chi_max,
+              cutoff=args.cutoff, cache_dir=None if args.no_cache else d / "ref", log=_log)
+    files = sorted(d.glob("baseline_o*.json"))
+    if args.targets:
+        picked = _pick_front(io.read_json(d / "baseline_scan.json"), "1e-12,1", args.targets)
+        names = {f"baseline_o{p['order']}_r{p['steps']}_e{p['eps']:.0e}.json" for p in picked}
+        files = [f for f in files if f.name in names]
+    if args.which in ("baseline", "both"):
+        for p in files:
+            with io.claim(p) as mine:
+                if not mine:
+                    _log(f"sample: {p.name} is being drawn by another job")
+                    continue
+                b = io.read_json(p)
+                if "mps" not in b or ("sampled" in b and not args.fresh):
+                    continue
+                if b["infid"] > 0.999:
+                    continue                          # nothing left to resolve
+                circ = trotter_circuit(model, args.t, b["order"], b["steps"])
+                rb = realize_baseline(circ, b["eps"])
+                _log(f"sample: baseline order {b['order']}, r = {b['steps']}, KN eps {b['eps']:.0e}")
+                sm = sample_baseline(circ, rb["circuit"], rb["synth"], b["eps"], model, args.t, **kw)
+                b["sampled"] = sm
+                b["infid_sampled"] = sm["infid"]
+                io.write_json(p, b)
+    if args.which in ("snap", "both"):
+        pattern = f"eval_{io.budget_tag(args.budget)}_D*.json" if args.budget else "eval_b*.json"
+        for p in sorted(d.glob(pattern)):
+            with io.claim(p) as mine:
+                if not mine:
+                    _log(f"sample: {p.name} is being drawn by another job")
+                    continue
+                e = io.read_json(p)
+                if "sampled" in e and not args.fresh:
+                    continue
+                real = io.read_json(d / p.name.replace("eval_", "real_"))
+                edges = real.get("edges") or {}
+                n_kn = len(real["kn"]) + (len(edges.get("kn", {})) if edges.get("use") else 0)
+                if e["infid"] > 0.999 or n_kn == 0:
+                    sm = {"infid": e["infid"], "drawn": False, "n_kn": n_kn}
+                else:
+                    _log(f"sample: SNAP {p.stem}, {n_kn} KN rotations")
+                    sm = {**sample_snap(real, cell, model, args.t, **kw), "drawn": True, "n_kn": n_kn}
+                e["sampled"] = sm
+                e["infid_sampled_kn"] = sm["infid"]
+                e["infid_sampled"] = snap_total(real, str(e["F"]), sm["infid"], e["N"])
+                io.write_json(p, e)
 
 
 def cmd_reference(args) -> None:
@@ -268,14 +351,15 @@ def cmd_reference(args) -> None:
 
 
 _HEAD = (f"{'point':>10} {'D':>3} {'C ring':>9} {'1-F mps':>9} {'stat':>6} {'bar':>6} {'conv':>7} "
-         f"{'1-F tot':>9} {'per site':>9} {'F':>3} {'T/q':>7} {'T/rot':>6} {'T/q/t':>7} {'chi':>5}")
+         f"{'1-F tot':>9} {'1-F drawn':>9} {'per site':>9} {'F':>3} {'T/q':>7} {'T/rot':>6} {'T/q/t':>7} {'chi':>5}")
 
 
 def _row(label: str, D, e: dict, F: str) -> str:
     m = e["mps"]
     conv = f"{m['trunc_check']['rel_change']:7.0e}" if "trunc_check" in m else f"{'-':>7}"
     return (f"{label:>10} {D!s:>3} {e['C_ring']:9.2e} {e['infid']:9.3e} {m['stderr'] / e['infid']:6.1%} "
-            f"{m['trunc_rel']:6.1%} {conv} {e['infid_total']:9.3e} {e['c_site']:9.2e} {F:>3} {e['Tq']:7.1f} "
+            f"{m['trunc_rel']:6.1%} {conv} {e['infid_total']:9.3e} "
+            f"{(format(e['infid_sampled'], '9.3e') if 'infid_sampled' in e else '-'):>9} {e['c_site']:9.2e} {F:>3} {e['Tq']:7.1f} "
             f"{e['T_per_rotation']:6.2f} {e['T_per_qubit_per_time']:7.1f} {m['chi_peak']:5d}")
 
 
@@ -284,7 +368,7 @@ def cmd_report(args) -> None:
     print(f"{model.describe()}, t = {args.t:g}, open chain. State infidelity on random product inputs by MPS.")
     print("C ring = held-out C at N = 10 on the ring. 1-F mps = success branch at N. stat = statistical error,")
     print("bar = pessimistic truncation bar, conv = change of input 0 at a 100x smaller cutoff, all relative.")
-    print("1-F tot includes the fallbacks.")
+    print("1-F tot includes the fallbacks by the bound, 1-F drawn with the KN fallbacks drawn (snapevo sample).")
     print(_HEAD)
     for p in sorted(d.glob("eval_*.json"), key=lambda p: -io.read_json(p)["budget"]):
         e = io.read_json(p)
@@ -297,7 +381,8 @@ def cmd_report(args) -> None:
 
 
 _SUMMARY_KEYS = ("infid", "infid_total", "fallback_share", "c_site", "C_ring", "infid_ring_pred", "Tq",
-                 "T_edges_per_qubit", "T_per_rotation", "T_per_qubit_per_time", "rotations_per_qubit")
+                 "T_edges_per_qubit", "T_per_rotation", "T_per_qubit_per_time", "rotations_per_qubit",
+                 "infid_sampled")
 
 
 def cmd_summary(args) -> None:
@@ -313,16 +398,17 @@ def cmd_summary(args) -> None:
         m = e["mps"]
         snap = p.name.startswith("eval_")
         c_total = 1.0 - (1.0 - min(e["infid_total"], 1.0)) ** (1.0 / e["N"])
+        c_samp = (1.0 - (1.0 - min(e["infid_sampled"], 1.0)) ** (1.0 / e["N"])) if "infid_sampled" in e else ""
         rows.append({"model": p.parent.parent.name, "t": e["t"], "method": "snap" if snap else "baseline",
                      "budget": e.get("budget", ""), "D": e.get("D", ""), "order": e.get("order", ""),
                      "steps": e.get("steps", ""), "eps": e.get("eps", ""), "F": e["F"], "N": e["N"],
                      "states": m["states"][1], "stderr": m["stderr"], "trunc_rel": m["trunc_rel"],
                      "trunc_check": m.get("trunc_check", {}).get("rel_change", ""), "chi_peak": m["chi_peak"],
-                     **{k: e.get(k, "") for k in _SUMMARY_KEYS}, "c_total": c_total,
+                     **{k: e.get(k, "") for k in _SUMMARY_KEYS}, "c_total": c_total, "c_sampled": c_samp,
                      **{k: e.get(k, "") for k in ("n_free", "n_t", "n_rus", "n_kn")}})
     out = base / "summary.csv"
     with out.open("w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0]) if rows else ["model"])
+        w = csv.DictWriter(fh, fieldnames=list(rows[0]) if rows else ["model"], lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
     print(f"{len(rows)} points -> {out}")
@@ -353,10 +439,15 @@ def _interp(env: list[tuple[float, float]], x: float) -> float | None:
 
 
 def cmd_compare(args) -> None:
-    """SNAP against the baseline at equal per-site infidelity, success branch and with the fallback bound.
+    """SNAP against the baseline at equal per-site infidelity, three ways.
 
-    The baseline's T is interpolated (log-log) along the lower envelope of its
-    evaluated points, and left blank where a SNAP point falls outside that range.
+    success: both success branches. bound: both with the fallback bound.
+    drawn: both with their KN fallbacks drawn (snapevo sample), and the bound
+    for SNAP's library gadgets on top, or SNAP's full bound where it has not
+    been drawn, which can only favour the baseline. Each cell is the
+    baseline's T per qubit at the SNAP point's infidelity, interpolated
+    (log-log) along the lower envelope of its evaluated points, and the ratio to
+    SNAP. A dash means the SNAP point is outside that envelope.
     """
     import csv
     import os
@@ -365,22 +456,25 @@ def cmd_compare(args) -> None:
     base = Path(os.environ.get("SNAPEVO_RUNS", io.repo_root() / "runs"))
     rows = list(csv.DictReader((base / "summary.csv").open()))
     names = {"xxz_d0.25_hx1.6": "A", "xxz_d0.25_hx0": "B"}
-    fmt = lambda v, f: "" if v is None else format(v, f)
-    print("| model | t | budget | D | c | SNAP T/q | base T/q | ratio | c with fallbacks | base T/q | ratio |")
+
+    def cell(env, x, tq):
+        y = _interp(env, x)
+        return "-" if y is None or tq <= 0 else f"{y:.1f} ({y / tq:.2f}x)"
+
+    print("| model | t | budget | D | SNAP T/q | c | success | c with bound | bound | c drawn | drawn |")
     print("|---|---|---|---|---|---|---|---|---|---|---|")
     for m in ("xxz_d0.25_hx1.6", "xxz_d0.25_hx0"):
         for t in sorted({float(r["t"]) for r in rows if r["model"] == m}):
             sel = [r for r in rows if r["model"] == m and float(r["t"]) == t]
-            base_pts = [r for r in sel if r["method"] == "baseline" and float(r["Tq"]) > 0]
-            env_s = _envelope([(float(r["c_site"]), float(r["Tq"])) for r in base_pts])
-            env_b = _envelope([(float(r["c_total"]), float(r["Tq"])) for r in base_pts
-                               if float(r["infid_total"]) < 1.0])       # a bound at 1 says nothing
+            bp = [r for r in sel if r["method"] == "baseline" and float(r["Tq"]) > 0]
+            env_s = _envelope([(float(r["c_site"]), float(r["Tq"])) for r in bp])
+            env_b = _envelope([(float(r["c_total"]), float(r["Tq"])) for r in bp if float(r["infid_total"]) < 1.0])
+            env_m = _envelope([(float(r["c_sampled"]), float(r["Tq"])) for r in bp if r.get("c_sampled")])
             for r in sorted((r for r in sel if r["method"] == "snap"), key=lambda r: -float(r["budget"])):
                 tq, cs, ct = float(r["Tq"]), float(r["c_site"]), float(r["c_total"])
-                bs, bb = _interp(env_s, cs), _interp(env_b, ct)
-                print(f"| {names.get(m, m)} | {t:g} | {float(r['budget']):.0e} | {r['D']} | {cs:.2e} | {tq:.1f} | "
-                      f"{fmt(bs, '.1f')} | {fmt(bs / tq if bs and tq > 0 else None, '.2f')} | {ct:.2e} | "
-                      f"{fmt(bb, '.1f')} | {fmt(bb / tq if bb and tq > 0 else None, '.2f')} |")
+                cd = float(r["c_sampled"]) if r.get("c_sampled") else ct
+                print(f"| {names.get(m, m)} | {t:g} | {float(r['budget']):.0e} | {r['D']} | {tq:.1f} | {cs:.2e} | "
+                      f"{cell(env_s, cs, tq)} | {ct:.2e} | {cell(env_b, ct, tq)} | {cd:.2e} | {cell(env_m, cd, tq)} |")
 
 
 _SNAP_COLOR, _BASE_COLOR, _INK, _MUTED = "#2a78d6", "#eb6834", "#0b0b0b", "#52514e"
@@ -392,8 +486,11 @@ def cmd_plot(args) -> None:
     The x axis is c = 1 - mean F^(1/N) from the 100-site MPS runs, so that the
     loose budgets, where 1 - F at N = 100 is close to 1, stay apart.
     1 - F = 1 - (1 - c)^100 is about 100 c below 1e-3. The *_bound figures use
-    the infidelity with the fallback bound instead of the success branch. The
-    baseline curve is the lower envelope of its evaluated points, and points
+    the infidelity with the fallback bound instead of the success branch, and
+    the *_sampled ones the infidelity with the KN fallbacks drawn (snapevo
+    sample), SNAP's library gadgets still bounded. Both curves follow the
+    lower envelope of their evaluated points. SNAP points off it (a budget
+    whose depth came out dearer than a tighter one) are drawn faint, and points
     with no T at all (a Clifford circuit) are left out of the log axes, and so
     are points whose fallback bound reaches 1 from the *_bound figures.
     """
@@ -411,9 +508,11 @@ def cmd_plot(args) -> None:
     times = sorted({float(r["t"]) for r in rows})
     out = base / "figures"
     out.mkdir(exist_ok=True)
-    xs = {"": ("c_site", r"per-site infidelity $c$ at $N = 100$, success branch"),
-          "_bound": ("c_total", r"per-site infidelity at $N = 100$ with the fallback bound")}
-    for suffix, (xkey, xlabel) in xs.items():
+    xs = {"": ("c_site", "c_site", r"per-site infidelity $c$ at $N = 100$, success branch"),
+          "_bound": ("c_total", "c_total", r"per-site infidelity at $N = 100$ with the fallback bound"),
+          "_sampled": ("c_sampled", "c_sampled", r"per-site infidelity at $N = 100$ with the KN fallbacks drawn "
+                       r"(SNAP's library gadgets bounded)")}
+    for suffix, (xsnap, xbase, xlabel) in xs.items():
         for key, label, fname in (("Tq", "T per qubit", "sweep_T_per_qubit"),
                                   ("T_per_rotation", "T per rotation", "sweep_T_per_rotation")):
             fig, axes = plt.subplots(len(models), len(times), figsize=(3.2 * len(times), 2.9 * len(models)),
@@ -423,14 +522,25 @@ def cmd_plot(args) -> None:
                     ax = axes[i][j]
                     for method, color, marker, face in (("snap", _SNAP_COLOR, "o", _SNAP_COLOR),
                                                         ("baseline", _BASE_COLOR, "s", "white")):
-                        pts = sorted(((float(r[xkey]), float(r[key])) for r in rows
+                        xkey = xsnap if method == "snap" else xbase
+
+                        def xval(r):                  # SNAP falls back on its full bound where not drawn
+                            if r.get(xkey):
+                                return float(r[xkey])
+                            return float(r["c_total"]) if method == "snap" and xkey == "c_sampled" else None
+
+                        pts = sorted(((xval(r), float(r[key])) for r in rows
                                       if r["model"] == m and float(r["t"]) == t and r["method"] == method
-                                      and float(r[key]) > 0 and (xkey != "c_total" or float(r["infid_total"]) < 1.0)),
+                                      and float(r[key]) > 0 and xval(r) is not None
+                                      and (xkey != "c_total" or float(r["infid_total"]) < 1.0)),
                                      key=lambda p: p[0])
-                        if method == "baseline":             # lower envelope of the baseline points
-                            pts = _envelope(pts)
-                        if pts:
-                            ax.plot(*zip(*pts), color=color, lw=1.5, marker=marker, ms=4.5, mfc=face, mew=1.2,
+                        env = _envelope(pts)                  # the line follows the lower envelope
+                        if method == "snap":                  # dominated SNAP points stay visible, faint
+                            off = [p for p in pts if p not in env]
+                            if off:
+                                ax.plot(*zip(*off), ls="none", marker=marker, ms=4.5, color=color, alpha=0.35)
+                        if env:
+                            ax.plot(*zip(*env), color=color, lw=1.5, marker=marker, ms=4.5, mfc=face, mew=1.2,
                                     label="SNAP" if method == "snap" else "Trotter + KN")
                     ax.set_xscale("log")
                     ax.set_yscale("log")
@@ -439,11 +549,10 @@ def cmd_plot(args) -> None:
                     for sp in ax.spines.values():
                         sp.set_color("#c9c8c2")
                     ax.set_title(f"model {names[m]}, $t = {t:g}$", fontsize=9, color=_INK)
-                    if i == len(models) - 1:
-                        ax.set_xlabel(xlabel, fontsize=8, color=_MUTED)
                     if j == 0:
                         ax.set_ylabel(label, fontsize=8, color=_MUTED)
             axes[0][0].legend(fontsize=8, frameon=False)
+            fig.supxlabel(xlabel, fontsize=9, color=_MUTED)
             fig.tight_layout()
             for ext in ("png", "pdf"):
                 fig.savefig(out / f"{fname}{suffix}.{ext}", dpi=160)
@@ -522,6 +631,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_evaluate)
     p = sub.add_parser("point", parents=[snap_opts, real_opts, eval_opts], help="compile + realize + evaluate")
     common(p, budget=True)
+    p.add_argument("--margins", default=None,
+                   help="comma-separated floor margins, one compile per distinct depth (default: --floor-margin)")
     p.set_defaults(func=cmd_point)
     p = sub.add_parser("baseline", parents=[eval_opts], help="product formula + KN, evaluated by MPS")
     common(p)
@@ -539,6 +650,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="comma-separated per-site values; evaluate only the point of each front nearest each")
     p.add_argument("--fresh", action="store_true", help="redo the scan and the evaluations")
     p.set_defaults(func=cmd_baseline_scan)
+    p = sub.add_parser("sample", parents=[eval_opts], help="draw the KN fallbacks of the evaluated points")
+    common(p)
+    p.add_argument("--samples", type=int, default=4, help="draws per input")
+    p.add_argument("--which", default="both", choices=("both", "baseline", "snap"))
+    p.add_argument("--targets", default=None, help="only the baseline points baseline-scan --targets picks")
+    p.add_argument("--budget", type=float, default=None, help="only the SNAP points of this budget")
+    p.add_argument("--fresh", action="store_true", help="draw again where a result exists")
+    p.set_defaults(func=cmd_sample)
     p = sub.add_parser("reference", parents=[eval_opts], help="build and cache the MPS references")
     common(p)
     p.add_argument("--only", default=None, help="comma-separated input indices (default: all)")

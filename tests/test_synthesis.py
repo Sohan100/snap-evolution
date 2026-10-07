@@ -40,3 +40,15 @@ def test_cache_lock_holds_across_processes(tmp_path):
     for p in procs:
         p.join()
     assert json.loads(path.read_text()) == 75                          # no update lost
+
+
+def test_claim_lets_one_process_in(tmp_path):
+    import pytest
+    pytest.importorskip("fcntl")
+    from snapevo import io
+    p = tmp_path / "point.json"
+    with io.claim(p) as first:
+        with io.claim(p) as second:                 # a second open file description, like another job
+            assert first and not second
+    with io.claim(p) as again:
+        assert again                                # released at the end of the block

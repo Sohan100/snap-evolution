@@ -1,7 +1,8 @@
 #!/bin/bash
-# Submit the whole sweep as five SLURM arrays. Training, references and the
+# Submit the whole sweep as six SLURM arrays. Training, references and the
 # baseline scans start at once. The SNAP points wait for training and references,
-# and the baseline evaluations wait for the scans and references. afterany, not
+# the baseline evaluations wait for the scans and references, and the fallback
+# draws wait for both the points and the baseline evaluations. afterany, not
 # afterok, so one failed task does not block the rest.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -16,4 +17,6 @@ scan=$(sub jobs/scan.txt --job-name=scan --time=24:00:00)
 points=$(sub jobs/points.txt --job-name=point --time=72:00:00 --dependency=afterany:"$train":"$ref")
 base=$(sub jobs/baselines.txt --job-name=baseline --time=48:00:00 --cpus-per-task=4 --mem=16G \
     --dependency=afterany:"$scan":"$ref")
-echo "train $train, reference $ref, scan $scan, points $points, baselines $base"
+samp=$(sub jobs/samples.txt --job-name=sample --time=72:00:00 --cpus-per-task=4 --mem=16G \
+    --dependency=afterany:"$points":"$base")
+echo "train $train, reference $ref, scan $scan, points $points, baselines $base, samples $samp"
