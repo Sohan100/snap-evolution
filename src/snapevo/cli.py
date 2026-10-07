@@ -70,6 +70,12 @@ def cmd_compile(args) -> tuple[int, dict]:
     model, cell, d = _ctx(args)
     records = cell_records(d / "cells.json")
     D = args.D or _pick_depth(records, args.budget, args.floor_margin)
+    rec_D = next(r for r in records if int(r["D"]) == D)
+    floor = max(rec_D["C_train"], rec_D.get("C_val", 0.0))
+    if floor * 1.5 > args.budget:
+        _log(f"compile: skip, the D = {D} floor {floor:.2e} leaves less than a third of the budget "
+             f"{args.budget:.1e} for snapping (train deeper)")
+        return D, None
     x_star, header = load_cell(d / "cells.json", D)
     if header["cell"] != cell.name:
         raise SystemExit(f"cells.json was trained with {header['cell']}, not {cell.name}")
@@ -160,7 +166,9 @@ def cmd_evaluate(args, D: int | None = None) -> dict:
 
 
 def cmd_point(args) -> None:
-    D, _ = cmd_compile(args)
+    D, compiled = cmd_compile(args)
+    if compiled is None:
+        return
     cmd_realize(args, D)
     cmd_evaluate(args, D)
 
@@ -382,7 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_baseline)
     p = sub.add_parser("baseline-scan", parents=[eval_opts], help="screen product formulas, MPS on the front")
     common(p)
-    p.add_argument("--c-range", default="1e-7,1e-3", dest="c_range", help="ring C range of front points to run")
+    p.add_argument("--c-range", default="1e-12,1", dest="c_range", help="ring C range of front points to run")
     p.add_argument("--evaluate", action="store_true", help="run the MPS evaluation of the front points")
     p.add_argument("--targets", default=None,
                    help="comma-separated ring C values; evaluate only the front point nearest each")

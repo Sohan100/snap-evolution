@@ -1,7 +1,8 @@
 #!/bin/bash
-# Submit the whole sweep as four SLURM arrays. Training and references start at
-# once; the SNAP points wait for both, the baselines wait for the references.
-# afterany, not afterok, so one failed task does not block the rest.
+# Submit the whole sweep as five SLURM arrays. Training, references and the
+# baseline scans start at once. The SNAP points wait for training and references,
+# and the baseline evaluations wait for the scans and references. afterany, not
+# afterok, so one failed task does not block the rest.
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p logs
@@ -9,9 +10,10 @@ sub() {
     local list=$1; shift
     sbatch --parsable --array=1-"$(wc -l < "$list")" --export=ALL,JOBS="$PWD/$list" "$@" array.slurm
 }
-train=$(sub jobs/train.txt --job-name=train --time=48:00:00)
+train=$(sub jobs/train.txt --job-name=train --time=72:00:00)
 ref=$(sub jobs/reference.txt --job-name=reference --time=24:00:00 --cpus-per-task=4 --mem=16G)
+scan=$(sub jobs/scan.txt --job-name=scan --time=24:00:00)
 points=$(sub jobs/points.txt --job-name=point --time=72:00:00 --dependency=afterany:"$train":"$ref")
-base=$(sub jobs/baselines.txt --job-name=baseline --time=72:00:00 --cpus-per-task=4 --mem=16G \
-    --dependency=afterany:"$ref")
-echo "train $train, reference $ref, points $points, baselines $base"
+base=$(sub jobs/baselines.txt --job-name=baseline --time=48:00:00 --cpus-per-task=4 --mem=16G \
+    --dependency=afterany:"$scan":"$ref")
+echo "train $train, reference $ref, scan $scan, points $points, baselines $base"

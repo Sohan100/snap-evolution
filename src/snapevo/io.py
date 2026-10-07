@@ -1,6 +1,7 @@
 """Where files live and how they are named.
 
-Everything a run produces goes under ``runs/<model tag>/t<t>/`` (gitignored):
+Everything a run produces goes under ``runs/<model tag>/t<t>/``. The results are tracked in git, the
+ref/ caches and run logs are not:
 
     cells.json                       trained depth ladder (train.py)
     snap_b<budget>_D<D>.json         compiled circuit (snap.py)
