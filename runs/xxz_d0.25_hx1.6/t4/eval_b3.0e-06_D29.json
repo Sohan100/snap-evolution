@@ -192,5 +192,12 @@
  "n_free": 51,
  "n_t": 6,
  "n_rus": 88,
- "n_kn": 0
+ "n_kn": 0,
+ "sampled": {
+  "infid": 0.0003062103136872718,
+  "drawn": false,
+  "n_kn": 0
+ },
+ "infid_sampled_kn": 0.0003062103136872718,
+ "infid_sampled": 0.0003075693935418028
 }
