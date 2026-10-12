@@ -112,22 +112,22 @@ def need(k: Task) -> tuple[int, float, float]:
     t = k.t
     if k.list == "train":
         return 2, 2, 600 if t <= 2 else 3600
-    if k.list == "reference":
+    if k.list == "reference":                  # an MPS at chi 1024 holds about 2 GB
         if t <= 4:
-            return 2, 4, 900
+            return 2, 2, 900
         if t <= 6:
-            return 4, 8, 1800
-        return (8, 32, 7200) if t <= 8 else (16, 64, 7200)
+            return 4, 4, 1800
+        return (8, 8, 7200) if t <= 8 else (16, 16, 7200)
     if k.list == "scan":
         return 2, 4, 900 if t <= 2 else 3600
     if k.list == "points":
         if t <= 2:
-            return 2, 6, 1200
-        return (2, 8, 3600) if t <= 4 else ((4, 16, 7200) if t <= 6 else (4, 24, 7200))
+            return 2, 4, 1200
+        return (2, 4, 3600) if t <= 4 else ((4, 8, 7200) if t <= 6 else (4, 12, 7200))
     # baselines and samples: MPS of whole circuits
     if t <= 4:
-        return 2, 8, 1200
-    return (4, 16, 3600) if t <= 6 else (8, 32, 7200)
+        return 2, 4, 1200
+    return (4, 8, 3600) if t <= 6 else (8, 16, 7200)
 
 
 def priority(k: Task) -> tuple:
