@@ -28,6 +28,20 @@ cluster/submit.sh
 
 On a workstation, `cluster/run_local.sh cluster/jobs/points.txt` runs a list in order.
 
+## On NERSC Perlmutter
+
+`array.slurm` carries the Perlmutter site lines (account `m4980`, `-C cpu`, the shared QOS, the module and the virtual environment), and `submit.sh` asks for at most 48 h, the cap of the shared and regular QOS. We ran the sweep on the preempt, debug, debug_preempt and interactive QOS instead. These hand out whole nodes (128 cores, 512 GB), so an array of single-process tasks would hold one node per task. The sweep runs as one work pool instead (`pool.py`):
+
+```
+cd cluster
+sbatch -q preempt --requeue -t 48:00:00 pool.slurm    # one node, requeued when preempted
+sbatch -q debug -t 00:30:00 pool.slurm                # one node, short lines only
+salloc -A m4980 -C cpu -q interactive -N 1 -t 04:00:00 srun -n 1 -c 256 --cpu-bind=none bash pool.slurm
+python pool.py status -v                              # done, running, ready, blocked, failed per list
+```
+
+Each node job runs one worker. It pulls lines from the same six job lists, runs as many at once as its cores allow, and pins each to its own cores (2 cores for training, compiles and short MPS runs, up to 16 for the references at $t = 10$). A line waits only for what it needs at its own model and time. A point waits for its ladder and references, a baseline evaluation for its scan and references, and a draw for the point and baseline evaluation of its budget. So the points at $t = 4$ start while the ladder at $t = 10$ still trains. A worker starts a line only if its wall time covers the line's minimum, so the 30 min debug nodes take only short lines, and it stops its lines 150 s before its wall time. They resume in the next worker, since every command skips finished work and compiles resume from their checkpoints. A line that fails twice waits for `pool.py retry`. Workers never submit jobs. Every node job is submitted by hand, sized to the lines that are ready. The pool keeps its state in `cluster/logs/pool/`, and `cluster/logs/submitted.txt` lists the node jobs.
+
 ## What to expect
 
 Measured on the cloud box (one core per job, often shared), $N = 100$, cutoff $10^{-12}$. Entries in italics are estimates.

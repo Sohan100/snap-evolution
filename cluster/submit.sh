@@ -11,12 +11,12 @@ sub() {
     local list=$1; shift
     sbatch --parsable --array=1-"$(wc -l < "$list")" --export=ALL,JOBS="$PWD/$list" "$@" array.slurm
 }
-train=$(sub jobs/train.txt --job-name=train --time=72:00:00)
+train=$(sub jobs/train.txt --job-name=train --time=48:00:00)
 ref=$(sub jobs/reference.txt --job-name=reference --time=24:00:00 --cpus-per-task=4 --mem=16G)
 scan=$(sub jobs/scan.txt --job-name=scan --time=24:00:00)
-points=$(sub jobs/points.txt --job-name=point --time=72:00:00 --dependency=afterany:"$train":"$ref")
+points=$(sub jobs/points.txt --job-name=point --time=48:00:00 --dependency=afterany:"$train":"$ref")
 base=$(sub jobs/baselines.txt --job-name=baseline --time=48:00:00 --cpus-per-task=4 --mem=16G \
     --dependency=afterany:"$scan":"$ref")
-samp=$(sub jobs/samples.txt --job-name=sample --time=72:00:00 --cpus-per-task=4 --mem=16G \
+samp=$(sub jobs/samples.txt --job-name=sample --time=48:00:00 --cpus-per-task=4 --mem=16G \
     --dependency=afterany:"$points":"$base")
 echo "train $train, reference $ref, scan $scan, points $points, baselines $base, samples $samp"
