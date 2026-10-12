@@ -1,8 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=snapevo
+#SBATCH -A m4980
+#SBATCH -C cpu
+#SBATCH -q shared
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
-#SBATCH --time=72:00:00
+#SBATCH --time=48:00:00
 #SBATCH --output=logs/%x_%A_%a.out
 #
 # Runs line $SLURM_ARRAY_TASK_ID of the job list $JOBS (one shell command per line).
@@ -12,9 +15,10 @@ set -euo pipefail
 : "${JOBS:?set JOBS to a job list}"
 cd "$SLURM_SUBMIT_DIR/.."
 
-# Site setup. Edit for your cluster (partition and account go in the #SBATCH lines above).
-# module load python/3.11
-# source .venv/bin/activate
+# Site setup, NERSC Perlmutter (account, constraint and QOS go in the #SBATCH lines above).
+module load python
+source .venv/bin/activate
+export SNAPEVO_RUNS=${SNAPEVO_RUNS:-$PWD/runs}
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
 export OPENBLAS_NUM_THREADS=$OMP_NUM_THREADS MKL_NUM_THREADS=$OMP_NUM_THREADS
