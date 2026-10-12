@@ -24,13 +24,15 @@ The repo already holds SNAP at all 15 budgets at $t = 1$ and at $10^{-1}$ to $3\
 - Leave `third_party/` and the grid in `cluster/make_jobs.py` (models, times, budgets, depths, margins, draws) as they are. If the grid looks wrong, stop and ask Sohan.
 - Keep the MPS settings at their defaults everywhere ($N = 100$, 8 inputs, seed 2026, $dt = 0.2$, cutoff $10^{-12}$, $\chi_{\max} = 1024$), so that every job finds the cached references.
 - Keep compile checkpoints (`*.ckpt.pkl`). A resubmitted compile resumes from them.
+- Work on the branch `nersc-sweep` and push only to it. Sohan merges it into `main`.
+- Use the GitHub login Sohan set up on Perlmutter (SSH key or `gh auth login`). Never ask for, print or store a token. If `git clone` or `git push` asks for credentials, stop and ask Sohan to set up access.
 - Write prose in Sohan's voice: "we" sentences, plain declaratives, numbered steps after "as follows:", math in LaTeX. Use commas and periods where you would reach for an em dash or a semicolon.
 
 ## Step 1. Set up
 
 As follows:
 
-1. Clone the repo to `$SCRATCH/snap-evolution` from the bundle Sohan copied over (`git clone snap-evolution.bundle snap-evolution`). Check that `git log -1` shows "Budget sweep at t = 1 and 2 with drawn fallbacks and two-depth compiles".
+1. Clone the repo from GitHub with `git clone https://github.com/Sohan100/snap-evolution.git $SCRATCH/snap-evolution`, or `git@github.com:Sohan100/snap-evolution.git` if Sohan set up an SSH key. Check that `git log --oneline` lists "Budget sweep at t = 1 and 2 with drawn fallbacks and two-depth compiles". Then make the working branch with `git switch -c nersc-sweep`.
 2. Run `module load python`, then create a venv in the repo (`python -m venv .venv && source .venv/bin/activate`) and run `pip install -e .[test,plot]`.
 3. Run `python -m snapevo verify-library` and `pytest`.
 4. Run `export SNAPEVO_RUNS=$SCRATCH/snap-evolution/runs` so the runs stay inside the repo on scratch. Lustre on Perlmutter supports `flock`, which the shared KN cache uses.
@@ -54,7 +56,7 @@ Step 2 is done when a smoke test passes. Run one line of `cluster/jobs/train.txt
 As follows:
 
 1. Run `python cluster/make_jobs.py`, then `cluster/submit.sh`. Record the six array job IDs it prints in `cluster/logs/submitted.txt`.
-2. Check progress about once a day with `squeue -u $USER` and `sacct -j <id> --format=JobID,State,Elapsed,ExitCode`.
+2. Check progress about once a day with `squeue -u $USER` and `sacct -j <id> --format=JobID,State,Elapsed,ExitCode`. After each check, commit the new files in `runs/` and run `git push origin nersc-sweep`, so Sohan can follow the sweep on GitHub.
 3. Resubmit every task that ended TIMEOUT. Use the same list and line number, for example `sbatch --array=17 --export=ALL,JOBS=$PWD/jobs/points.txt array.slurm`, from `cluster/`. Nothing is lost, because compiles resume from their checkpoint.
 4. For a task that FAILED, read its log in `cluster/logs/`, fix the cause if it is environmental (memory, module, path), and resubmit. If the cause is a bug in `snapevo`, stop and report it to Sohan with the traceback. Do not patch the physics code on your own.
 5. When the points and baseline arrays are both done, check that the sample array ran after them. Resubmit any sample tasks that started early.
@@ -90,6 +92,7 @@ As follows:
 
 1. Add a section "Cluster sweep, t = 1 to 10" at the top of `docs/validation.md`, built like the $t = 1, 2$ section. It needs the SNAP tables per $t$ (`snapevo report`), the comparison tables, the findings of step 5 and the failures of step 4. Point to the figures by path.
 2. Update "Where it runs" in `docs/plan.md` and the measured-costs table in `cluster/README.md` with the real times from `sacct`.
-3. Commit the results and docs with a message that says what ran. `runs/` is tracked, and `ref/`, logs, checkpoints and lock files are ignored by `.gitignore`. Then make a fresh bundle, `git bundle create $SCRATCH/snap-evolution-results.bundle --all`, for Sohan to pull back.
+3. Commit the results and docs with a message that says what ran. `runs/` is tracked, and `ref/`, logs, checkpoints and lock files are ignored by `.gitignore`. GitHub rejects files over 100 MB, so check with `find runs -size +50M` first and report anything it finds instead of committing it.
+4. Run `git push origin nersc-sweep`.
 
-Step 6 is done when `git status` is clean, the bundle exists, and the new section reads with no gaps for any model and time.
+Step 6 is done when `git status` is clean, `nersc-sweep` on GitHub matches the local branch, and the new section reads with no gaps for any model and time.
