@@ -123,11 +123,11 @@ def need(k: Task) -> tuple[int, float, float]:
     if k.list == "points":
         if t <= 2:
             return 2, 4, 1200
-        return (2, 4, 3600) if t <= 4 else ((4, 8, 7200) if t <= 6 else (4, 12, 7200))
+        return (2, 4, 1500) if t <= 4 else ((4, 8, 7200) if t <= 6 else (4, 12, 7200))
     # baselines and samples: MPS of whole circuits
     if t <= 4:
         return 2, 4, 1200
-    return (4, 8, 3600) if t <= 6 else (8, 16, 7200)
+    return (4, 8, 1500) if t <= 6 else (8, 16, 7200)
 
 
 def priority(k: Task) -> tuple:
