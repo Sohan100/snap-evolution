@@ -21,7 +21,9 @@ where it stopped. A line that fails twice waits for `retry`.
 
 A worker starts a line only if its remaining wall time covers the line's
 minimum (`need` below), so the 30 min debug jobs take only short lines. A line
-cut off by a deadline gets a larger minimum next time.
+cut off by a deadline gets a larger minimum next time (minwall/). Writing a
+huge minimum there holds a line back from every worker except one started with
+`--force <list>`, which is how a changed command reaches only new workers.
 
 State lives in cluster/logs/pool/ (ignored by git): run/ (claims with a
 heartbeat), done/, fail/, tasks/ (one log per line), attempts.jsonl, and stop/
@@ -170,10 +172,11 @@ def _running(tid: str, now: float) -> bool:
         return False
 
 
-def _minwall(k: Task) -> float:
+def _minwall(k: Task, force: tuple = ()) -> float:
+    """The line's minimum wall time, raised by earlier deadline cuts unless its list is forced."""
     f = _p("minwall", k.id)
     base = need(k)[2]
-    return max(base, float(f.read_text())) if f.exists() else base
+    return max(base, float(f.read_text())) if f.exists() and k.list not in force else base
 
 
 def classify(tasks: list[Task]) -> dict[str, str]:
@@ -218,8 +221,9 @@ def _deadline() -> float:
 
 
 class Worker:
-    def __init__(self, cores: int, mem_gb: float, pin: bool, max_task_hours: float | None, idle_exit: float):
-        self.cores, self.mem, self.pin = cores, mem_gb, pin
+    def __init__(self, cores: int, mem_gb: float, pin: bool, max_task_hours: float | None, idle_exit: float,
+                 force: tuple = ()):
+        self.cores, self.mem, self.pin, self.force = cores, mem_gb, pin, force
         self.max_task = max_task_hours * 3600 if max_task_hours else math.inf
         self.idle_exit = idle_exit
         self.deadline = _deadline()
@@ -315,7 +319,7 @@ class Worker:
             if len(self.free) < 2 or self.stopping:
                 break
             cores, mem, _ = need(k)
-            mw = _minwall(k)
+            mw = _minwall(k, self.force)
             if cores <= len(self.free) and mem_used + mem <= self.mem and mw <= left and mw <= self.max_task:
                 self._launch(k)
                 mem_used += mem
@@ -341,6 +345,7 @@ class Worker:
                 with contextlib.suppress(FileNotFoundError):
                     os.utime(_p("run", r["task"].id))
             if len(self.free) >= 2 and not self.stopping:
+                tasks = load_tasks()                  # the lists may change while the sweep runs
                 with _locked():
                     left_anywhere = self._fill(tasks)
                 if not left_anywhere and not self.running:
@@ -393,6 +398,7 @@ def main() -> None:
     w.add_argument("--no-pin", action="store_true", dest="no_pin", help="do not pin lines to cores (login nodes)")
     w.add_argument("--max-task-hours", type=float, default=None, dest="max_task_hours")
     w.add_argument("--idle-exit", type=float, default=600, dest="idle_exit", help="seconds idle before exiting")
+    w.add_argument("--force", default="", help="comma-separated lists whose raised minimums this worker ignores")
     s = sub.add_parser("status")
     s.add_argument("-v", action="store_true")
     r = sub.add_parser("retry")
@@ -402,7 +408,8 @@ def main() -> None:
         n = os.cpu_count() or 2
         cores = a.cores or (n // 2 if JOB else max(1, n // 8))
         mem = a.mem_gb or (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30 * 0.9)
-        Worker(cores, mem, not a.no_pin and bool(JOB), a.max_task_hours, a.idle_exit).run()
+        Worker(cores, mem, not a.no_pin and bool(JOB), a.max_task_hours, a.idle_exit,
+               tuple(v for v in a.force.split(",") if v)).run()
     elif a.cmd == "status":
         status(a.v)
     elif a.cmd == "retry":
