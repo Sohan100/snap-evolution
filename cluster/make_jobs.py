@@ -43,12 +43,17 @@ STATES = 8
 SPLIT_FROM = 6                               # from this t on, one reference job per input
 SAMPLES = {1: 4, 2: 4, 4: 4, 6: 2, 8: 2, 10: 2}   # fallback draws per input, each one more circuit MPS
 MARGINS = "3,30"   # one compile at the shallowest depth with floor <= B/3 and one with floor <= B/30
+# L-BFGS iterations per start. At 6000 the deepest depths of every ladder at t >= 4 hit the cap and
+# stopped as stalled, with the three starts up to 2.7x apart (Sohan, 12 Oct: extend them at 30000).
+# Training resumes, so the depths already trained stay and the ladders continue past the stop.
+MAXITER = {1: 6000, 2: 6000, 4: 30000, 6: 30000, 8: 30000, 10: 30000}
 
 
 def main() -> None:
     py = "python -m snapevo"
     jobs = {
-        "train": [f"{py} train --model {m} --t {t} --depths {DEPTHS[t]}" for m in MODELS for t in TIMES],
+        "train": [f"{py} train --model {m} --t {t} --depths {DEPTHS[t]}"
+                  + (f" --maxiter {MAXITER[t]}" if MAXITER[t] != 6000 else "") for m in MODELS for t in TIMES],
         "reference": [],
         "scan": [f"{py} baseline-scan --model {m} --t {t}" for m in MODELS for t in TIMES],
         "points": [f"{py} point --model {m} --t {t} --budget {b} --margins {MARGINS}"
