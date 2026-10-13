@@ -498,7 +498,7 @@
   1.0,
   2.0
  ],
- "C_train_real": 9.92170383273816e-06,
+ "C_train_real": 9.921703833071227e-06,
  "straggler_eps_scale": 1.0,
  "lattice": {
   "0": {
@@ -4139,7 +4139,7 @@
   "n_snapped": 10,
   "infid_ring": 0.00020098552246705648,
   "nit": 73,
-  "seconds": 1503.824202299118,
+  "seconds": 1412.1456289291382,
   "use": true,
   "eps": 0.0001,
   "angles_real": [
