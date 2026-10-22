@@ -14,3 +14,6 @@ runs/logs/
 cluster/logs/
 runs/**/chain/ckpt/
 runs/**/chain/lock
+runs/**/ring2/ckpt/
+runs/**/lock
+*.ckpt.json
