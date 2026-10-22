@@ -1,0 +1,33 @@
+% Appendix for Sec. V (time evolution). Draft by Sohan, 22 Oct 2026. \input after appendices.tex.
+% Settings of the open-chain arm (cluster/chain_train.py, cluster/chain_snap.py --reopt newton --edge-zero-t,
+% snapevo.train_chain_best, snapevo.chain_snap, cluster/sample_chain.py) and the baseline (snapevo.baseline,
+% cluster/reeval_ref.py). Sources: those docstrings, docs/error_metric.md, docs/cost_model.md,
+% snapevo-scratch/litbase/rigorous_builder_report.md, and the run records of 22 Oct 2026.
+
+\section{Time-evolution details}
+\label{app:te_details}
+
+\subsection{Training}
+
+Every circuit is trained on the open chain of $N = 100$ sites. The training set is 12 random product inputs. Their references are a fourth-order product formula with step $0.1$, truncated at a discarded weight of $10^{-14}$ and a bond dimension of at most 2048, and the circuit itself is truncated at $10^{-14}$ and 1024. The parameters are the bulk angles, one set per sublayer, and the six $R_z R_y R_z$ angles of the two end gates on every odd sublayer, which start from the single-qubit factor of the missing bond gate. Each start is optimized as in Sec.~\ref{sec:snap_compile}. The ladder adds depths from a fixed grid and stops once the floor falls by less than a factor of 1.5 over eight sublayers, or reaches $10^{-10}$. Each depth also records its error on the 8 held-out inputs of the evaluation.
+
+\subsection{Compiling}
+
+The optimizer, the Newton steps before the first snap and the re-optimization of each trial follow Sec.~\ref{sec:snap_compile}, and the Hessian follows Eq.~\eqref{eq:hess_fd}. While compiling, the library is priced with a fallback cost of $T_{\mathrm{fb}} = 22$ for the correction of a failed library circuit. The budget rules of the loop are those of the snap protocol appendix, Eqs.~\eqref{eq:share_cap} and~\eqref{eq:prefix}. The end angles are in the free block of every Hessian, so the predicted response moves them too, and they enter the stage that snaps zero-cost angles directly. They are not candidates of the Hessian rounds. When the loop stops, each end angle is weighted by $2/N$ against a bulk angle, since an end gate appears once and a bulk gate $N/2$ times, and receives a library angle or a synthesis budget by the same allocation as the bulk stragglers. The end gates are then simplified on the chain within the budget: gates near the identity are dropped, gates whose middle angle is near zero become single $R_z$ rotations, and angles within $10^{-2}$ of a multiple of $\pi/4$ are set to it. After compiling we reprice the library on $T_{\mathrm{fb}} \in \{18, 20, \dots, 30\}$ and keep the smallest value whose total error is within 1\% of the total at $T_{\mathrm{fb}} = 30$.
+
+\subsection{Matrix product states}
+
+The evaluation evolves both $U|\phi_k\rangle$ and $e^{-iHt}|\phi_k\rangle$ as matrix product states on the open chain. After each two-qubit gate we keep the fewest singular values whose discarded weight is at most $10^{-12}$, up to a bond dimension of 1024, and $10^{-14}$ for the budgets $3 \times 10^{-9}$ and $10^{-9}$. The reference is a fourth-order product formula with step $0.1$ at $h_x = 1.6$ and $0.2$ at $h_x = 0$, where its error is about $2 \times 10^{-13}$ per site. For each field and time we repeat one input at a cutoff 100 times smaller, and we flag a point if its infidelity changes by more than 5\%.
+
+\subsection{Fallback branches}
+
+Each synthesized rotation $i$ takes its fallback branch with probability $q_i \leq 0.1$ per use, and its fallback differs from its success branch by $\delta_i$ in the diamond norm. In the $N = 100$ simulation we draw the branch of every synthesized rotation at random, bulk and end gates alike, with 4 draws per input for $t \leq 4$, and average. A library circuit whose failure is not a multiple of $\pi/4$ is corrected by a synthesized rotation whose circuit the library does not carry, so for these we use a bound. With $\Lambda = \sum_i q_i \delta_i$ and $Q_2 = \tfrac12 \sum_i q_i \delta_i^{2}$ over all such instances,
+\begin{equation}
+1 - F \leq \Big( \sqrt{1 - F_s} + \frac{\Lambda}{2} \Big)^{2} + Q_2 ,
+\label{eq:te_fallback_bound}
+\end{equation}
+where $F_s$ is the fidelity with every library circuit on its success branch. The bound follows because $\sqrt{1 - F}$ is a metric on pure states and each fallback moves the output by at most $\delta_i/2$ in it. Its contribution is small, since these corrections are synthesized to about $10^{-5}$. A point that has not been drawn yet carries the same bound over all its synthesized rotations, which can only overstate its error.
+
+\subsection{Baselines}
+
+The measured baseline scans product formulas of order 1, 2 and 4 over the number of steps $r$ and the synthesis precision $\epsilon_{\mathrm{syn}} \in \{10^{-1}, 3 \times 10^{-2}, \dots, 10^{-7}\}$. The product formulas are not trained. We screen them by their error on a 10-site ring and evaluate the cheapest at each error at $N = 100$ on the open chain, exactly as for SNAP. At $h_x = 1.6$ the error of the step-$0.2$ reference partly cancels that of a product formula, so every point with $\epsilon \leq 10^{-6}$ there is evaluated against step-$0.1$ references. The rigorous baseline converts the operator-norm bound $\delta$ of Ref.~\cite{Liu2026}, for the Trotter error and the synthesis together, into a guarantee on the error per site through $1 - F \leq \delta^{2}$, which gives $\epsilon \leq 1 - (1 - \delta^{2})^{1/N}$. Each of the $R$ rotations receives a synthesis precision $\delta_{\mathrm{syn}}/R$, where $\delta_{\mathrm{syn}}$ is the part of $\delta$ left after the Trotter error.

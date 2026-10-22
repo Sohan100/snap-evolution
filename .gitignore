@@ -17,3 +17,4 @@ runs/**/chain/lock
 runs/**/ring2/ckpt/
 runs/**/lock
 *.ckpt.json
+._dbindex_/
