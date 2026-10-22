@@ -1,0 +1,45 @@
+reference c_ref per site (ring 16, 64 inputs):
+  h_x 1.6 t  1 dt 0.2: 1.82e-11
+  h_x 1.6 t  1 dt 0.1: 7.58e-14
+  h_x 0   t  1 dt 0.2: 1.59e-13
+  h_x 0   t  1 dt 0.1: -2.07e-15
+  h_x 1.6 t  2 dt 0.2: 1.90e-11
+  h_x 1.6 t  2 dt 0.1: 8.49e-14
+  h_x 0   t  2 dt 0.2: 2.48e-13
+  h_x 0   t  2 dt 0.1: -4.36e-15
+  h_x 1.6 t  4 dt 0.2: 2.04e-11
+  h_x 1.6 t  4 dt 0.1: 1.04e-13
+  h_x 0   t  4 dt 0.2: 2.32e-13
+  h_x 0   t  4 dt 0.1: -9.89e-15
+  h_x 1.6 t  6 dt 0.2: 2.63e-11
+  h_x 1.6 t  6 dt 0.1: 1.41e-13
+  h_x 0   t  6 dt 0.2: 4.09e-13
+  h_x 0   t  6 dt 0.1: -1.49e-14
+  h_x 1.6 t  8 dt 0.2: 3.38e-11
+  h_x 1.6 t  8 dt 0.1: 1.85e-13
+  h_x 0   t  8 dt 0.2: 6.53e-13
+  h_x 0   t  8 dt 0.1: -1.93e-14
+  h_x 1.6 t 10 dt 0.2: 4.38e-11
+  h_x 1.6 t 10 dt 0.1: 2.39e-13
+  h_x 0   t 10 dt 0.2: 8.89e-13
+  h_x 0   t 10 dt 0.1: -2.40e-14
+192 points with C16 <= 1e-6
+  snap h_x 1.6: n 49, |shift| median 0.01%, max 0.18%, > 2%: 0
+  snap h_x 0: n 53, |shift| median 0.02%, max 0.28%, > 2%: 0
+  baseline h_x 1.6: n 47, |shift| median 0.27%, max 2.71%, > 2%: 3
+  baseline h_x 0: n 43, |shift| median 0.59%, max 7.52%, > 2%: 11
+points whose c100 reference step shifts C16 by more than 2%:
+  baseline:0:1:o4_r2_e1e-06        C16 2.65e-10 step 0.2: -4.9%  (step 0.1: -0.31%)
+  baseline:0:1:o4_r2_e3e-06        C16 2.96e-10 step 0.2: -4.5%  (step 0.1: -0.28%)
+  baseline:1.6:4:o4_r14_e1e-07     C16 4.05e-10 step 0.1: -2.7%  (step 0.1: -2.71%)
+  baseline:0:6:o2_r162_e1e-07      C16 2.45e-09 step 0.2: +2.2%  (step 0.1: +0.13%)
+  baseline:0:6:o2_r162_e3e-07      C16 1.70e-09 step 0.2: +2.1%  (step 0.1: +0.13%)
+  baseline:1.6:6:o4_r21_e1e-07     C16 5.44e-10 step 0.1: -2.7%  (step 0.1: -2.66%)
+  baseline:0:8:o2_r243_e1e-07      C16 3.39e-09 step 0.2: +2.3%  (step 0.1: +0.14%)
+  baseline:0:8:o4_r14_e1e-06       C16 4.92e-09 step 0.2: -2.2%  (step 0.1: -0.14%)
+  baseline:0:8:o4_r14_e3e-06       C16 5.55e-09 step 0.2: -2.1%  (step 0.1: -0.13%)
+  baseline:0:8:o4_r14_e3e-07       C16 2.88e-09 step 0.2: -3.0%  (step 0.1: -0.19%)
+  baseline:0:10:o4_r21_e1e-06      C16 3.60e-09 step 0.2: -2.9%  (step 0.1: -0.18%)
+  baseline:0:10:o4_r21_e1e-07      C16 9.22e-10 step 0.2: -6.2%  (step 0.1: -0.39%)
+  baseline:0:10:o4_r21_e3e-07      C16 5.39e-10 step 0.2: -7.5%  (step 0.1: -0.49%)
+  baseline:1.6:10:o4_r32_e1e-07    C16 1.41e-09 step 0.1: -2.2%  (step 0.1: -2.16%)
