@@ -1,0 +1,29 @@
+Copied 350 run records from /pscratch/sd/s/sohan100/snap-evolution/runs at 2026-10-22 01:20:10 PDT.
+SNAP circuits: 208
+== h_x = 1.6
+t=1: SNAP reaches eps 1.0e-06; ratio at 1e-3 3.26; min 1.13 at 1e-02, max 4.70 at 1e-06
+   Clifford share at budget 1e-3: median 0.64 over 4 depths
+t=2: SNAP reaches eps 1.1e-05; ratio at 1e-3 3.33; min 2.07 at 6e-03, max 4.28 at 3e-05
+   Clifford share at budget 1e-3: median 0.40 over 4 depths
+t=4: SNAP reaches eps 2.9e-04; ratio at 1e-3 3.39; min 3.20 at 9e-03, max 4.76 at 6e-03
+   Clifford share at budget 1e-3: median 0.10 over 2 depths
+ratio over all eps and t: 1.13 (t=1, 1e-02) to 4.76 (t=4, 6e-03)
+rigorous/SNAP, eps 1e-3..1e-6: 20.6 to 50.8; rigorous/PF: 4.4 to 15.0
+T per rotation, eps 1e-2..1e-5: SNAP 1.30 to 5.58, PF 2.72 to 15.77; SNAP/PF rotations 0.77 to 1.94
+== h_x = 0.0
+t=1: SNAP reaches eps 1.5e-09; ratio at 1e-3 1.30; min 1.10 at 2e-03, max 3.89 at 4e-08
+   Clifford share at budget 1e-3: median 0.71 over 5 depths
+t=2: SNAP reaches eps 1.0e-05; ratio at 1e-3 1.71; min 1.30 at 3e-03, max 2.98 at 3e-05
+   Clifford share at budget 1e-3: median 0.59 over 4 depths
+t=4: SNAP reaches eps 2.9e-04; ratio at 1e-3 2.14; min 1.49 at 3e-04, max 2.37 at 4e-03
+   Clifford share at budget 1e-3: median 0.41 over 3 depths
+ratio over all eps and t: 1.10 (t=1, 2e-03) to 3.89 (t=1, 4e-08)
+rigorous/SNAP, eps 1e-3..1e-6: 7.8 to 21.0; rigorous/PF: 3.1 to 10.8
+T per rotation, eps 1e-2..1e-5: SNAP 0.34 to 5.63, PF 3.49 to 16.08; SNAP/PF rotations 1.20 to 6.18
+unsnapped: 0 of 174 circuits at budget >= 1e-4; 10 of 34 below, max share 0.46
+held-out/training at N = 100: median 1.001, range 0.918 to 1.054
+bound/success for SNAP: median 1.000, 90th percentile 1.007; drawn: 2 of 208
+end-gate share of T: max 0.025
+PF drawn/success: median 1.023
+whole chain h_x=1.6 t=4 eps=3e-4: SNAP 1.54e+04, PF 5.62e+04
+whole chain h_x=0.0 t=4 eps=3e-4: SNAP 1.37e+04, PF 2.01e+04

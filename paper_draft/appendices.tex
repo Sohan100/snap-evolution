@@ -1,0 +1,172 @@
+\section{Other moved stuff}
+
+\subsection{Circuits and error}
+\label{sec:snap_conventions}
+The state preparation circuits of Sec. \ref{sec:stateprep} are built from two qubit orthogonal gates $G \in O(4)$ placed on a fixed layout, and Fig.~\ref{fig:library}(a) shows that each gate is written as six $R_z$ rotations and Cliffords. With $s = (1 - \det G)/2 \in \{0, 1\}$, the product $\mathrm{CZ}^{s} G$ has unit determinant. Every real orthogonal matrix of unit determinant is a product of two $SU(2)$ matrices in the Bell basis~\cite{VatanWilliams2004}, so that
+\begin{equation}
+G = \mathrm{CZ}^{s}\, W^{\dagger} \big[ A_1 \otimes A_2 \big] W
+\label{eq:o4_six_rz}
+\end{equation}
+where $A_1, A_2 \in SU(2)$ and $W$ is the Clifford of Fig.~\ref{fig:library}(a) that maps the computational basis to the Bell basis,
+\begin{equation}
+\begin{split}
+W &= \mathrm{CNOT}_{1\to 2}\, (H \otimes I)\, \mathrm{CNOT}_{2\to 1}\, (S \otimes I) \\
+&= \frac{1}{\sqrt{2}} \begin{pmatrix} 1 & 0 & i & 0 \\ 0 & 1 & 0 & i \\ 0 & -1 & 0 & i \\ 1 & 0 & -i & 0 \end{pmatrix}
+\end{split}
+\label{eq:W}
+\end{equation}
+Here $\mathrm{CNOT}_{a\to b}$ has control $a$ and target $b$, and the matrix is written in the basis $|00\rangle, |01\rangle, |10\rangle, |11\rangle$ with qubit $1$ on the left. Each $SU(2)$ factor is written in $Z$-$Y$-$Z$ Euler form~\cite{NielsenChuang},
+\begin{equation}
+A_i = R_z(\alpha_i)\, R_y(\beta_i)\, R_z(\gamma_i)
+\label{eq:euler}
+\end{equation}
+The middle rotation is an $R_z$ rotation between Cliffords, since $R_y(\beta) = (SH)\, R_z(\beta)\, (SH)^{\dagger}$. Each gate therefore carries six $R_z$ rotations, with angles $\alpha_1, \beta_1, \gamma_1, \alpha_2, \beta_2, \gamma_2$, and the decomposition of Eqs.~\eqref{eq:o4_six_rz} to \eqref{eq:euler} is exact. A circuit of $M$ gates contains $R = 6M$ such rotations. We number them $k = 1, \dots, R$ in circuit order and write $\theta_k$ for the angle of rotation $k$, so that the vector $\boldsymbol{\theta} = (\theta_1, \dots, \theta_R) \in \mathbb{R}^{R}$ lists the six angles of every gate. The T count is carried by these $R_z$ rotations alone, since Cliffords cost no T.
+
+For the ground states of Sec.~\ref{sec:stateprep_xxz} the gates are placed on a tree of long-range gates followed by nearest-neighbor layers, and the target $|\phi\rangle$ is a matrix product state (MPS)~\cite{Schollwock2011} of maximum bond dimension $\chi$. The circuit prepares $|\psi(\boldsymbol{\theta})\rangle = C(\boldsymbol{\theta})\,|0\rangle^{\otimes n}$ on $n$ qubits, as drawn in Fig.~\ref{fig:overview}(b), and the error is the infidelity
+\begin{equation}
+\varepsilon(\boldsymbol{\theta}) = 1 - \big| \langle \phi | \psi(\boldsymbol{\theta}) \rangle \big|^{2}
+\label{eq:infid}
+\end{equation}
+All infidelities in this paper follow Eq.~\eqref{eq:infid}. Before any angle is snapped, we optimize all $R$ angles as continuous variables to minimize $\varepsilon(\boldsymbol{\theta})$, using the continuous compile of Sec.~\ref{sec:snap_compile}, which opens the loop of Fig.~\ref{fig:overview}(a). We call the resulting angles the continuous optimum $\boldsymbol{\theta}^{\star}$. A circuit with a fixed layout generally cannot reach the target exactly, so $\boldsymbol{\theta}^{\star}$ leaves a residual infidelity $\varepsilon_0 = \varepsilon(\boldsymbol{\theta}^{\star})$. The compiled circuit must satisfy $\varepsilon \leq \varepsilon_{\mathrm{target}}$ after all snaps, so $\varepsilon_0$ is part of the total budget, and the snaps may add at most $\varepsilon_{\mathrm{target}} - \varepsilon_0$.
+
+% SG, 22 Oct 2026: rewritten for the open-chain arm (was: a ring of L = 10 qubits).
+\sg{The time-evolution circuits of Sec.~\ref{sec:time_evolution} differ in both the circuit and the target. They act on an open chain of $N = 100$ qubits and apply the same parametrized two-qubit gate to every nearest-neighbor pair of one parity, in alternating brickwork layers, with a single-qubit gate on each end site of the odd layers. The angles of the bond gate are already $R_z$ rotations up to Cliffords, so it needs no decomposition. The target is the exact evolution of a set of random product inputs, held as matrix product states, and the cost is the infidelity per site of Eq.~\eqref{eq:te_eps}, built from the corresponding overlaps. The method uses the cost only through these overlaps, so it carries over unchanged, apart from the environment calculation of Sec.~\ref{sec:snap_env}, which must account for angles shared by several rotations.}
+
+\subsection{Environments}
+\label{sec:snap_env}
+Each $R_z$ rotation of a state preparation circuit appears exactly once, so the overlap is linear in it. Holding every angle other than $\theta_k$ fixed and contracting the rest of the tensor network~\cite{EvenblyVidal2009}, as shown in Fig.~\ref{fig:overview}(b), leaves a 2 $\times$ 2 matrix $E_k$ with 
+\begin{equation}
+\begin{split}
+&\langle \phi | \psi(\boldsymbol{\theta}) \rangle = \mathrm{Tr}\big[ E_k\, R_z(\theta_k) \big] \\
+&\quad = (E_k)_{00}\, e^{-i\theta_k/2} + (E_k)_{11}\, e^{i\theta_k/2} \\
+&\quad = |(E_k)_{00}|\, e^{i(\eta_{k,0} - \theta_k/2)} + |(E_k)_{11}|\, e^{i(\eta_{k,1} + \theta_k/2)}
+\end{split}
+\label{eq:env_overlap}
+\end{equation}
+Here $\eta_{k,0}$ and $\eta_{k,1}$ are the phases of the diagonal entries, $(E_k)_{jj} = |(E_k)_{jj}|\, e^{i\eta_{k,j}}$ for $j = 0, 1$. Only the diagonal entries of $E_k$ enter, since $R_z(\theta_k)$ in Eq.~\eqref{eq:rz} is diagonal. Substituting Eq.~\eqref{eq:env_overlap} into Eq.~\eqref{eq:infid} gives the infidelity as a function of $\theta_k$ alone,
+\begin{equation}
+\varepsilon(\theta_k) = 1 - a_k - b_k \cos(\theta_k - \varphi_k)
+\label{eq:sinusoid}
+\end{equation}
+where $a_k = |(E_k)_{00}|^2 + |(E_k)_{11}|^2$, $b_k = 2\,|(E_k)_{00}|\,|(E_k)_{11}|$, and $\varphi_k = \arg\big[(E_k)_{00}\,(E_k)_{11}^{*}\big] = \eta_{k,0} - \eta_{k,1}$ is the relative phase of the two diagonal entries. These three coefficients depend on every angle except $\theta_k$.
+
+The infidelity is therefore a sinusoid in each angle~\cite{Nakanishi2020, Ostaszewski2021}, and a single contraction fixes it exactly at every value of that angle. A snap sets $\theta_k$ to an angle $\alpha$ of the library of Sec.~\ref{sec:snap_library}, and we define the plug-in infidelity $\varepsilon_{\mathrm{init}}(k, \alpha)$ as Eq.~\eqref{eq:sinusoid} evaluated at $\theta_k = \alpha$. It is the infidelity of the circuit when rotation $k$ is moved to $\alpha$ and every other angle keeps its current value. The free angles are then re-optimized starting from this point, and the re-optimization does not raise the infidelity, so $\varepsilon_{\mathrm{init}}(k, \alpha)$ is an upper bound on the infidelity after the snap. It increases with the distance between $\alpha$ and $\varphi_k$, taken modulo $2\pi$, so among the library angles of a given cost the best candidate is the one closest to $\varphi_k$.
+
+The environments enter the loop of Fig.~\ref{fig:overview}(a) directly after the continuous compile, and they are recomputed at the start of every round, since each accepted snap changes the environments of all other rotations. They supply the Hessian ranking of Sec.~\ref{sec:snap_hessian} with the size of the rise, $\varepsilon_{\mathrm{init}}(k, \alpha) - \varepsilon_{\mathrm{cur}}$, where $\varepsilon_{\mathrm{cur}}$ is the infidelity at the current angles. The Hessian then determines only the fraction of this rise that survives once the free angles compensate.
+
+The rise could also be estimated from the Hessian alone. At the continuous optimum, and after every re-optimization, each free angle sits at the minimum of its own sinusoid, $\theta_k = \varphi_k$, where the diagonal Hessian entry is $H_{kk} = \partial^{2}\varepsilon/\partial\theta_k^{2} = b_k$. Moving the angle by $\delta$ then gives
+\begin{equation}
+\begin{split}
+\varepsilon_{\mathrm{init}}(k, \varphi_k + \delta) - \varepsilon_{\mathrm{cur}} &= b_k (1 - \cos\delta) \\
+&= \frac{H_{kk}\,\delta^{2}}{2} \Big[ 1 - \frac{\delta^{2}}{12} + O(\delta^{4}) \Big]
+\end{split}
+\label{eq:rise}
+\end{equation}
+For the small displacements of most library snaps the bracket equals one to high accuracy, and the quadratic estimate from the Hessian would suffice. The environment is still preferred, for three reasons. First, it is exact at every $\delta$, including moves to Clifford angles, where $\delta$ reaches $\pi/4$ and the bracket in Eq.~\eqref{eq:rise} is $0.95$, and it does not assume that $\theta_k$ sits exactly at its minimum, which holds only to the tolerance of the optimizer. Second, $\varepsilon_{\mathrm{init}}$ is an upper bound at any point, so a snap with $\varepsilon_{\mathrm{init}} \leq \varepsilon_{\mathrm{target}}$ is accepted without a trial. The first step of the loop of Fig.~\ref{fig:overview}(a), described in Sec.~\ref{sec:snap_hessian}, uses this to fix Clifford angles. Third, it is cheap. Evaluating the infidelity directly for every pair of rotation and library angle would take $121\,920\,R$ overlaps, whereas the environments need one contraction per rotation and one cosine per pair.
+
+For an MPS target~\cite{Schollwock2011}, we obtain these matrices from the environments of whole gates, as shown in Fig.~\ref{fig:gate_env}. We label the gates $G_1, \dots, G_M$ in circuit order and write $|\psi_{<j}\rangle = G_{j-1} \cdots G_1 |0\rangle^{\otimes n}$ for the state prepared before gate $j$ and $\langle \phi_{>j}| = \langle \phi |\, G_M \cdots G_{j+1}$ for the target pulled back through the gates after it, as in Fig.~\ref{fig:gate_env}(a). The environment of gate $j$, drawn in Fig.~\ref{fig:gate_env}(b), is the $4 \times 4$ matrix
+\begin{equation}
+\begin{split}
+E^{(4)} &= \mathrm{Tr}_{\bar{j}}\big[\, |\psi_{<j}\rangle \langle \phi_{>j}|\, \big] \\
+\langle \phi | \psi \rangle &= \mathrm{Tr}\big[ E^{(4)} G_j \big]
+\end{split}
+\label{eq:gate_env}
+\end{equation}
+where $\mathrm{Tr}_{\bar{j}}$ traces out every qubit on which $G_j$ does not act, and reconnecting $G_j$ as in Fig.~\ref{fig:gate_env}(c) returns the overlap. Caching $|\psi_{<j}\rangle$ and $\langle \phi_{>j}|$ as MPS from both ends of the circuit gives the environments of all $R$ rotations at a cost of $O(nR\chi^{3})$ per round. To reach a single rotation, let rotation $k$ act on the first qubit of gate $j$ and split the gate as in Fig.~\ref{fig:gate_env}(d), $G_j = X_a\, [R_z(\theta_k) \otimes I]\, X_b$, where $X_b$ and $X_a$ collect the factors of Eqs.~\eqref{eq:o4_six_rz} to \eqref{eq:euler} applied before and after the rotation. Then
+\begin{equation}
+E_k = \mathrm{Tr}_2\big[ X_b\, E^{(4)} X_a \big]
+\label{eq:rot_env}
+\end{equation}
+where $\mathrm{Tr}_2$ traces out the second qubit of the gate, and the two qubits exchange roles for a rotation on the second qubit. Equation~\eqref{eq:rot_env} needs only products of $4 \times 4$ matrices, at a cost independent of $n$ and $\chi$. The same gate environments drive the continuous compile of Sec.~\ref{sec:snap_compile}, following Ref.~\cite{EvenblyVidal2009}.
+
+% SG, 22 Oct 2026: the shared-angle curves as computed on the open chain.
+\sg{In the time-evolution circuits of Sec.~\ref{sec:time_evolution} the same gate acts on every bond of a sublayer, so an angle $\theta$ is shared by the $m = N/2$ rotations of an even sublayer, or the $N/2 - 1$ of an odd one, and the overlap is no longer linear in it.} For each input state, with $|\phi\rangle$ its exact evolution,
+\begin{align}
+\langle \phi | \psi(\theta) \rangle &= \sum_{l=0}^{m} c_l\, e^{i(2l - m)\theta/2}
+\label{eq:shared_overlap} \\
+\big| \langle \phi | \psi(\theta) \rangle \big|^{2} &= \sum_{q=-m}^{m} d_q\, e^{iq\theta}
+\label{eq:shared_trig}
+\end{align}
+where the $c_l$ do not depend on $\theta$ and $d_q = \sum_{l - l' = q} c_l\, c_{l'}^{*}$. \sg{This form holds for the angles $a$, $b$, $c$, $e$ and $f$ of Eq.~\eqref{eq:te_gate}. The staggered angle $d$ enters each bond as $R_z(d) \otimes R_z(-d)$, whose phases are $e^{0}$ and $e^{\pm i\theta}$ rather than $e^{\pm i\theta/2}$, so its overlap has $2m + 1$ terms instead of $m + 1$. On the open chain we hold the state before sublayer $\ell$, $|a_\ell\rangle$, and the target pulled back through the later sublayers, $\langle b_\ell|$, as matrix product states, and we contract $\langle b_\ell | L_\ell(\theta) | a_\ell \rangle$ without truncation, so it is exactly the trigonometric polynomial described above. Its $m + 1$ coefficients $c_l$, or $2m + 1$ for the staggered angle, follow from a discrete Fourier transform of the overlap at as many equally spaced values of $\theta$~\cite{Wierichs2022}, 51 or 101 at $N = 100$, and one more value at the current angle checks the fit. Dividing by the norms of $|a_\ell\rangle$ and $\langle b_\ell|$ then gives $\varepsilon_{\mathrm{init}}$ exactly at every library angle.}
+
+
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_snap_overview.pdf}
+\caption{(a) The SNAP loop. The blue boxes repeat once per accepted snap, and a trial is accepted when the re-optimized infidelity is within the budget and the budget rules of Sec.~\ref{sec:snap_hessian} are met. (b) The environment of one rotation, shown for an MPS target. Removing $R_z(\theta_k)$ from the overlap $\langle\phi|\psi(\boldsymbol{\theta})\rangle$ and contracting the rest of the network leaves a $2\times 2$ matrix $E_k$, from which the exact infidelity at every value of $\theta_k$ follows in closed form, as derived in Sec.~\ref{sec:snap_env}. Figure~\ref{fig:gate_env} shows how $E_k$ follows from the environment of its gate. \dr{lets split up this figure, move fig. a to Snap compilation section}}
+\label{fig:overview}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_gate_environment.pdf}
+\caption{Gate and rotation environments. (a) The overlap $\langle\phi|\psi\rangle$ for a layout of gates $G_1, \dots, G_M$, with gate $G_j$ highlighted. The gates before $G_j$ prepare $|\psi_{<j}\rangle$, and the gates after it, applied in reverse to the target, give $\langle\phi_{>j}|$. (b) Removing $G_j$ leaves four open legs, $b_1$ and $b_2$ on the input side and $a_1$ and $a_2$ on the output side, and contracting the rest of the network gives the $4 \times 4$ environment of Eq.~\eqref{eq:gate_env}. (c) Reconnecting $G_j$ closes the trace and returns the overlap. (d) Inside the gate, $G_j = X_a [R_z(\theta_k) \otimes I] X_b$. Removing $R_z(\theta_k)$ and closing the other qubit gives the $2 \times 2$ environment $E_k$ of Eq.~\eqref{eq:rot_env}, with open legs $c$ and $c'$.}
+\label{fig:gate_env}
+\end{figure*}
+
+\subsection{Continuous compile}
+\label{sec:snap_compile}
+Snapping starts from the continuous optimum $\boldsymbol{\theta}^{\star}$ in Sec.~\ref{sec:snap_conventions}. For the state preparation circuits we compute it gate by gate, following Evenbly and Vidal~\cite{EvenblyVidal2009}. With every other gate held fixed, the overlap is linear in the gate, $\langle \phi | \psi \rangle = \mathrm{Tr}[E^{(4)} G]$, where $E^{(4)}$ is the gate environment of Eq.~\eqref{eq:gate_env} and Fig.~\ref{fig:gate_env}(b). Let $\omega = \arg \langle \phi | \psi \rangle$ be the phase of the current overlap. Since every candidate gate $G'$ is real,
+\begin{equation}
+\begin{split}
+\big| \mathrm{Tr}[E^{(4)} G'] \big| &\geq \mathrm{Re}\big( e^{-i\omega}\, \mathrm{Tr}[E^{(4)} G'] \big) = \mathrm{Tr}[K G'] \\
+K &= \mathrm{Re}\big[ e^{-i\omega} E^{(4)} \big]
+\end{split}
+\label{eq:polar_bound}
+\end{equation}
+with equality at the current gate. Over the real orthogonal matrices, $\mathrm{Tr}[K G']$ is maximized by
+\begin{equation}
+G' = V U^{T}, \qquad K = U \Sigma V^{T}
+\label{eq:polar}
+\end{equation}
+where $U \Sigma V^{T}$ is the singular value decomposition of $K$, and its maximum is $\mathrm{Tr}\,\Sigma$. By Eq.~\eqref{eq:polar_bound}, replacing the gate by Eq.~\eqref{eq:polar} never lowers $|\langle \phi | \psi \rangle|$. Since $\omega$ changes with the gate, we recompute it and repeat the update a few times per gate. The maximum runs over all of $O(4)$ and does not fix $\det G$, so a gate can change branch during the compile, and the factor $\mathrm{CZ}^{s}$ of Eq.~\eqref{eq:o4_six_rz} records the branch on which it ends.
+
+A sweep applies this update to every gate in circuit order. Each update uses the environment of Eq.~\eqref{eq:gate_env}, with $|\psi_{<j}\rangle$ and $\langle \phi_{>j}|$ held as MPS of maximum bond dimension $\chi$, so a sweep costs about as much as one computation of all environments. We repeat sweeps until $|\langle \phi | \psi \rangle|$ stops increasing. The gates start as random orthogonal matrices, and a larger layout starts from the optimum of the smaller layout it contains, with each added gate set to the identity.
+
+The compile returns one orthogonal matrix per gate, which we convert to angles through Eqs.~\eqref{eq:o4_six_rz} to \eqref{eq:euler} and the circuit of Fig.~\ref{fig:library}(a). The sign $s$ follows from $\det G$, the two factors from $A_1 \otimes A_2 = W\, \mathrm{CZ}^{s} G\, W^{\dagger}$, and the six angles from the $Z$-$Y$-$Z$ Euler form of each factor. The result is $\boldsymbol{\theta}^{\star}$, and its infidelity is $\varepsilon_0$.
+
+Once snapping begins, a gate with a snapped angle can no longer be updated as a whole, so we re-optimize the free angles one at a time. Each free angle is set to the minimum of its sinusoid, Eq.~\eqref{eq:sinusoid},
+\begin{equation}
+\theta_k \leftarrow \varphi_k
+\label{eq:coord_update}
+\end{equation}
+with $E_k$ recomputed from Eq.~\eqref{eq:rot_env} along the sweep, as in Fig.~\ref{fig:gate_env}(d). This is the coordinate update of Refs.~\cite{Nakanishi2020, Ostaszewski2021}, and it never raises the infidelity. We repeat it until $|\langle \phi | \psi \rangle|$ stops increasing or a maximum number of sweeps is reached.
+
+% SG, 22 Oct 2026: rewritten for the open-chain arm (was: L-BFGS-B with automatic differentiation on the ring).
+\sg{The time-evolution circuits of Sec.~\ref{sec:time_evolution} share each angle among many gates, so no gate can be updated on its own. We minimize their cost directly over the bulk and end angles, on the open chain, by trust-region Newton steps. The gradient comes from the adjoint method on the matrix product states. The forward pass stores the state before every sublayer, a backward pass carries the target back through the circuit one sublayer at a time, and contracting the two around each gate gives the derivative of every overlap with respect to that gate. The Hessian is that of Eq.~\eqref{eq:hess_fd}, and each one serves several Newton steps before it is recomputed. At each depth we run three optimizations, started from the Trotter angles of that depth, from the optimum at the previous depth padded with identity layers, and from the Trotter angles with 0.1~rad of noise, and we keep the best of the three. Each runs until the error falls by less than a part in $10^{6}$ in a step or reaches the truncation noise, with no cap on the number of iterations. Before the first snap, further Newton steps continue until the predicted decrease of a step is below $10^{-6}$ of the budget. The same method, with the Hessian recomputed every 20 steps, re-optimizes the free angles after each snap, in the trial step of Fig.~\ref{fig:overview}(a).}
+
+\subsection{Hessian}
+
+projected onto the positive semidefinite matrices by setting its negative eigenvalues to zero. At a minimum $H$ is already positive semidefinite and the projection leaves it unchanged, so its diagonal entries are the curvatures $H_{kk}$ of Eq.~\eqref{eq:rise}.
+
+For the state preparation circuits we compute $H$ from the overlap $o(\boldsymbol{\theta}) = \langle \phi | \psi(\boldsymbol{\theta}) \rangle$. Differentiating Eq.~\eqref{eq:infid} twice gives
+\begin{equation}
+H_{kl} = -2\, \mathrm{Re}\big[ (\partial_k o)^{*}\, \partial_l o + o^{*}\, \partial_k \partial_l o \big]
+\label{eq:hess_overlap}
+\end{equation}
+where $\partial_k = \partial / \partial\theta_k$. For rotation $k$ in gate $j$, the gate environment of Eq.~\eqref{eq:gate_env} gives $\partial_k o = \mathrm{Tr}[E^{(4)} \partial_k G_j]$, and the same environment gives $\partial_k \partial_l o$ when rotation $l$ is in the same gate. When rotation $l$ is in a later gate $j'$, we propagate $|\partial_k \psi_{<j'}\rangle = G_{j'-1} \cdots G_{j+1}\, (\partial_k G_j)\, |\psi_{<j}\rangle$ as an MPS~\cite{Schollwock2011} and use it in place of $|\psi_{<j'}\rangle$ in the environment of gate $j'$. % SG, 22 Oct 2026: rewritten for the open-chain arm (was: automatic differentiation when few angles are free).
+\sg{For the time-evolution circuits, $H$ is the Hessian of the training error of Eq.~\eqref{eq:te_eps} in place of $\varepsilon$, over the free bulk and end angles. We take central differences of its exact adjoint gradient $\mathbf{g}$,}
+\begin{equation}
+H_{kl} = \frac{g_l(\boldsymbol{\theta} + h\, \mathbf{e}_k) - g_l(\boldsymbol{\theta} - h\, \mathbf{e}_k)}{2h}
+\label{eq:hess_fd}
+\end{equation}
+\sg{where $\mathbf{e}_k$ is the unit vector along $\theta_k$ and $h = 10^{-4}$, and symmetrize the result. Only the rows of free angles are computed, and the $2|\mathcal{F}|$ gradients of one Hessian run in parallel over the training inputs. The finite-difference Hessian is noisy at about $5 \times 10^{-8}$ of its largest entry, so the pseudo-inverse in Eq.~\eqref{eq:hess_response} discards singular values below $10^{-8}$ of the largest.}
+
+\subsection{Snap protocol}
+
+The loop of Fig.~\ref{fig:overview}(a) repeats four steps. First, we compute the environments of the free rotations and snap zero-cost rotations directly. Among all free rotations and all Clifford angles, we take the pair with the lowest $\varepsilon_{\mathrm{init}}$, and if $\varepsilon_{\mathrm{init}} \leq \varepsilon_{\mathrm{target}}$ we snap it, re-optimize the free angles and repeat. These snaps need no trial, since $\varepsilon_{\mathrm{init}}$ is an upper bound. Second, we compute $H$, and for each free rotation $p$ and each distinct cost $c$ in the library, including $c = 0$, we keep the angle of cost $c$ with the lowest $\varepsilon_{\mathrm{init}}(p, \alpha)$, which by Sec.~\ref{sec:snap_env} is the one closest to $\varphi_p$. We discard every candidate with $\varepsilon_{\mathrm{pred}} > \varepsilon_{\mathrm{target}}$. Third, we order the remaining candidates by cost, and within one cost by $\varepsilon_{\mathrm{pred}}$, with ties broken by the largest component of $\mathbf{x}_f$, so that the snaps that disturb the free angles least come first. In the time-evolution circuits an angle is shared by $m$ rotations, and the cost of a candidate is $m\, c(\alpha)$. Fourth, we try a fixed number of candidates at each cost, in this order. A trial fixes $\theta_p = \alpha$, starts the free angles at $\boldsymbol{\theta}_f + \mathbf{x}_f$, and re-optimizes them with the method of Sec.~\ref{sec:snap_compile}, which is the coordinate update of Eq.~\eqref{eq:coord_update}~\cite{Nakanishi2020, Ostaszewski2021} for the state preparation circuits and \sg{trust-region Newton steps} for the time-evolution circuits. We accept the snap if the re-optimized infidelity is at most $\varepsilon_{\mathrm{target}}$ and return to the first step. The quadratic model only orders the trials, and the re-optimization alone decides acceptance. When no candidate at any cost is accepted, the loop ends and the rotations still free are synthesized as described in Sec.~\ref{sec:snap_library}. Including $c = 0$ in the second step lets the loop try a Clifford angle that fails the plug-in test of the first step but is predicted to fit once the free angles respond. Sections~\ref{sec:stateprep_xxz} and~\ref{sec:time_evolution_setup} give the settings of the loop for each application.
+
+The state preparation runs of Sec.~\ref{sec:stateprep} use the loop as described. In the time-evolution runs of Sec.~\ref{sec:time_evolution} the budget is often only a few times $\varepsilon_0$, and there the loop can spend the whole budget on snaps, leaving the rotations it never reaches to be synthesized at whatever precision remains, which costs more than the last snaps saved. We add four rules for these runs. First, a snap is accepted only if the budget it leaves suffices to synthesize every other free rotation at no more than the cost of the most expensive library angle. We estimate the budget that each such rotation needs from its curvature $H_{kk}$, and we cap the total at a fixed fraction of $\varepsilon_{\mathrm{target}}$, scaled by the fraction of angles still free, so that it cannot exceed the budget at tight targets. Second, the prediction of Eq.~\eqref{eq:hess_pred} is optimistic when $\varepsilon_{\mathrm{target}}$ is only a few times $\varepsilon_0$, so we limit how much of the remaining budget one snap may consume,
+\begin{equation}
+\varepsilon_{\mathrm{after}} - \varepsilon_{\mathrm{cur}} \leq \lambda\, \kappa\, \frac{\varepsilon_{\mathrm{target}} - \varepsilon_{\mathrm{cur}}}{|\mathcal{F}|}
+\label{eq:share_cap}
+\end{equation}
+where $\varepsilon_{\mathrm{after}}$ is the re-optimized infidelity of the trial and $|\mathcal{F}|$ is the number of free rotations, so that $(\varepsilon_{\mathrm{target}} - \varepsilon_{\mathrm{cur}})/|\mathcal{F}|$ is the fair share of the remaining budget. The constant $\kappa$ is the number of fair shares that one snap may take, and $\lambda \geq 1$ relaxes the bound. We apply the same bound to $\varepsilon_{\mathrm{pred}}$ when forming the candidates. Third, Eq.~\eqref{eq:share_cap} is a preference and not a veto. Each run starts at $\lambda = 1$. If a round accepts no candidate, we repeat it with a larger $\lambda$, up to removing the bound, and later rounds keep the value of $\lambda$ that succeeded. A round also ends after a fixed number of trials. Fourth, every prefix of the accepted sequence is itself a valid compilation. Let $\varepsilon_j$ be the infidelity after the first $j$ of the $S$ accepted snaps, $\mathcal{F}_j$ the set of rotations still free at that point, and $T_{\mathrm{syn}}(\mathcal{F}_j, \varepsilon_{\mathrm{target}} - \varepsilon_j)$ the expected T count of synthesizing them within the remaining budget at the fallback cost of Sec.~\ref{sec:snap_library}. We report
+\begin{equation}
+T = \min_{0 \leq j \leq S} \Big[ \sum_{i=1}^{j} m_i\, c_i + T_{\mathrm{syn}}\big(\mathcal{F}_j,\, \varepsilon_{\mathrm{target}} - \varepsilon_j\big) \Big]
+\label{eq:prefix}
+\end{equation}
+where $c_i$ is the library cost of the $i$th accepted snap and $m_i$ is the number of rotations that share its angle. \sg{On the open chain $T_{\mathrm{syn}}$ also covers the end angles, each weighted by $2/N$ against a bulk angle, since an end gate appears once per circuit and a bulk gate $N/2$ times.}
+
+The loop can accept a snap whose plug-in infidelity exceeds the entire remaining budget, as for the Clifford angle in Fig.~\ref{fig:env_hessian}(b), because by Eq.~\eqref{eq:hess_pred} only the fraction $r_p$ of the rise survives. A compiler that fixes every rotation at once cannot accept such a snap, however it allocates the budget.
