@@ -1,12 +1,12 @@
-python -m snapevo train --model A --t 1 --depths 2,3,5,7,9,11,13,15
-python -m snapevo train --model A --t 2 --depths 2,3,5,7,9,11,13,15,17,19,21,25
-python -m snapevo train --model A --t 4 --depths 3,5,7,9,11,13,15,17,21,25,29,33,37,41 --maxiter 30000
-python -m snapevo train --model A --t 6 --depths 3,5,7,9,13,17,21,25,29,33,37,41,45,49,53 --maxiter 30000
-python -m snapevo train --model A --t 8 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73 --maxiter 30000
-python -m snapevo train --model A --t 10 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81 --maxiter 30000
-python -m snapevo train --model B --t 1 --depths 2,3,5,7,9,11,13,15
-python -m snapevo train --model B --t 2 --depths 2,3,5,7,9,11,13,15,17,19,21,25
-python -m snapevo train --model B --t 4 --depths 3,5,7,9,11,13,15,17,21,25,29,33,37,41 --maxiter 30000
-python -m snapevo train --model B --t 6 --depths 3,5,7,9,13,17,21,25,29,33,37,41,45,49,53 --maxiter 30000
-python -m snapevo train --model B --t 8 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73 --maxiter 30000
-python -m snapevo train --model B --t 10 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81 --maxiter 30000
+python -m snapevo train --model A --t 1 --depths 2,3,5,7,9,11,13,15,17,19,21,23,25,29,33 --maxiter 30000 --stall 1.5,8 --target 1e-10 --polish 50
+python -m snapevo train --model A --t 2 --depths 2,3,5,7,9,11,13,15,17,19,21,25,29,33,37,41,45,49,57,65 --maxiter 30000 --stall 1.5,8 --target 1e-10 --polish 50
+python -m snapevo train --model A --t 4 --depths 3,5,7,9,11,13,15,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97 --maxiter 30000 --stall 1.5,8 --target 1e-10 --polish 50
+python -m snapevo train --model A --t 6 --depths 3,5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97,105,113,121 --maxiter 30000 --stall 1.5,8 --target 1e-10
+python -m snapevo train --model A --t 8 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97,105,113,121,129,137,145 --maxiter 30000 --stall 1.5,8 --target 1e-10
+python -m snapevo train --model A --t 10 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97,105,113,121,129,137,145,153,161 --maxiter 30000 --stall 1.5,8 --target 1e-10
+python -m snapevo train --model B --t 1 --depths 2,3,5,7,9,11,13,15,17,19,21,23,25,29,33 --maxiter 30000 --stall 1.5,8 --target 1e-10 --polish 50
+python -m snapevo train --model B --t 2 --depths 2,3,5,7,9,11,13,15,17,19,21,25,29,33,37,41,45,49,57,65 --maxiter 30000 --stall 1.5,8 --target 1e-10 --polish 50
+python -m snapevo train --model B --t 4 --depths 3,5,7,9,11,13,15,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97 --maxiter 30000 --stall 1.5,8 --target 1e-10 --polish 50
+python -m snapevo train --model B --t 6 --depths 3,5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97,105,113,121 --maxiter 30000 --stall 1.5,8 --target 1e-10
+python -m snapevo train --model B --t 8 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97,105,113,121,129,137,145 --maxiter 30000 --stall 1.5,8 --target 1e-10
+python -m snapevo train --model B --t 10 --depths 5,7,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,73,81,89,97,105,113,121,129,137,145,153,161 --maxiter 30000 --stall 1.5,8 --target 1e-10

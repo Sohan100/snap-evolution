@@ -27,7 +27,7 @@ from snapevo.cli import _envelope, _interp
 
 REPO = Path(__file__).resolve().parent.parent
 RUNS = Path(os.environ.get("SNAPEVO_RUNS", REPO / "runs"))
-NAMES = {"xxz_d0.25_hx1.6": "A", "xxz_d0.25_hx0": "B"}
+NAMES = {"xxz_d0.25_hx1.6": r"$\Delta = 0.25$, $h_x = 1.6$", "xxz_d0.25_hx0": r"$\Delta = 0.25$, $h_x = 0$"}
 
 
 def f(r, k):

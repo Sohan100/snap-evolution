@@ -59,8 +59,10 @@ def cmd_train(args) -> None:
     from snapevo.train import train_ladder
     model, cell, d = _ctx(args)
     _log(f"train: {model.describe()}, cell {cell.name}, t = {args.t:g}, depths {args.depths}")
+    factor, window = args.stall.split(",")
     train_ladder(model, cell, args.t, [int(v) for v in args.depths.split(",")], d / "cells.json",
-                 maxiter=args.maxiter, log=_log)
+                 maxiter=args.maxiter, stall=(float(factor), int(window)), target=args.target,
+                 polish=args.polish, log=_log)
 
 
 def cmd_compile(args) -> tuple[int, dict]:
@@ -503,8 +505,10 @@ def cmd_plot(args) -> None:
     cmd_summary(args)
     base = Path(os.environ.get("SNAPEVO_RUNS", io.repo_root() / "runs"))
     rows = list(csv.DictReader((base / "summary.csv").open()))
-    names = {"xxz_d0.25_hx1.6": "A", "xxz_d0.25_hx0": "B"}
+    names = {"xxz_d0.25_hx1.6": r"$h_x = 1.6$", "xxz_d0.25_hx0": r"$h_x = 0$"}
     models = [m for m in ("xxz_d0.25_hx1.6", "xxz_d0.25_hx0") if any(r["model"] == m for r in rows)]
+    ham = (r"XXZ chain, $H = J\sum_i (S^x_i S^x_{i+1} + S^y_i S^y_{i+1} + \Delta\, S^z_i S^z_{i+1})"
+           r" + h_x \sum_i S^x_i$, $J = 1$, $\Delta = 0.25$, spin units")
     times = sorted({float(r["t"]) for r in rows})
     out = base / "figures"
     out.mkdir(exist_ok=True)
@@ -548,11 +552,12 @@ def cmd_plot(args) -> None:
                     ax.tick_params(colors=_MUTED, labelsize=8)
                     for sp in ax.spines.values():
                         sp.set_color("#c9c8c2")
-                    ax.set_title(f"model {names[m]}, $t = {t:g}$", fontsize=9, color=_INK)
+                    ax.set_title(rf"$\Delta = 0.25$, {names[m]}, $t = {t:g}$", fontsize=9, color=_INK)
                     if j == 0:
                         ax.set_ylabel(label, fontsize=8, color=_MUTED)
             axes[0][0].legend(fontsize=8, frameon=False)
             fig.supxlabel(xlabel, fontsize=9, color=_MUTED)
+            fig.suptitle(ham, fontsize=10, color=_INK)
             fig.tight_layout()
             for ext in ("png", "pdf"):
                 fig.savefig(out / f"{fname}{suffix}.{ext}", dpi=160)
@@ -582,6 +587,11 @@ def build_parser() -> argparse.ArgumentParser:
     common(p)
     p.add_argument("--depths", required=True, help="comma-separated depths")
     p.add_argument("--maxiter", type=int, default=6000)
+    p.add_argument("--stall", default="2,4",
+                   help="FACTOR,WINDOW: stop once the floor falls by less than FACTOR over WINDOW sublayers")
+    p.add_argument("--target", type=float, default=None, help="stop once the floor is at or below this C")
+    p.add_argument("--polish", type=int, default=0,
+                   help="trust-region Newton steps on the exact Hessian after the best L-BFGS-B start")
     p.set_defaults(func=cmd_train)
 
     snap_opts = argparse.ArgumentParser(add_help=False)

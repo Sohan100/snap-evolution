@@ -12,3 +12,5 @@ runs/logs/
 *.lock
 *.tmp.npz
 cluster/logs/
+runs/**/chain/ckpt/
+runs/**/chain/lock

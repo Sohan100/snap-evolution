@@ -178,3 +178,35 @@ python -m snapevo point --model B --t 10 --budget 3e-7 --margins 3,30
 python -m snapevo point --model B --t 10 --budget 1e-7 --margins 3,30
 python -m snapevo point --model B --t 10 --budget 3e-8 --margins 3,30
 python -m snapevo point --model B --t 10 --budget 1e-8 --margins 3,30
+python -m snapevo point --model A --t 1 --budget 3e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model A --t 1 --budget 1e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model A --t 2 --budget 3e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model A --t 2 --budget 1e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model A --t 4 --budget 3e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model A --t 4 --budget 1e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model B --t 1 --budget 3e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model B --t 1 --budget 1e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model B --t 2 --budget 3e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model B --t 2 --budget 1e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model B --t 4 --budget 3e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model B --t 4 --budget 1e-9 --margins 3,30 --cutoff 1e-14
+python -m snapevo point --model A --t 6 --budget 3e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 6 --budget 1e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 8 --budget 3e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 8 --budget 1e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 10 --budget 3e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 10 --budget 1e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 6 --budget 3e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 6 --budget 1e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 8 --budget 3e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 8 --budget 1e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 10 --budget 3e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 10 --budget 1e-9 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 6 --budget 1e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 8 --budget 3e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 8 --budget 1e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 10 --budget 3e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model A --t 10 --budget 1e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 8 --budget 3e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 8 --budget 1e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
+python -m snapevo point --model B --t 10 --budget 1e-8 --margins 3,30 --cutoff 1e-14 --chi-max 2048
