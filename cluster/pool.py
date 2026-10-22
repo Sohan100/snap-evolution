@@ -112,6 +112,10 @@ def load_tasks() -> list[Task]:
 def need(k: Task) -> tuple[int, float, float]:
     """Cores, memory (GB) and the minimum wall time (s) worth starting the line with."""
     t = k.t
+    if "--chi-max 2048" in k.cmd and t >= 8:   # chi up to 2048: about 8x the time, 4x the memory of 1024
+        if k.list == "reference":              # not checkpointed, so the minimum covers the whole run
+            return 16, 48, (8 if t > 8 else 3) * 3600
+        return (4, 48, 4 * 3600) if k.list == "points" else (8, 48, 4 * 3600)
     if k.list == "train":
         return 2, 2, 600 if t <= 2 else 3600
     if k.list == "reference":                  # an MPS at chi 1024 holds about 2 GB

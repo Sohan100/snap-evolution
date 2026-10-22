@@ -178,3 +178,35 @@ python -m snapevo baseline-scan --model B --t 10 --evaluate --targets 3e-7
 python -m snapevo baseline-scan --model B --t 10 --evaluate --targets 1e-7
 python -m snapevo baseline-scan --model B --t 10 --evaluate --targets 3e-8
 python -m snapevo baseline-scan --model B --t 10 --evaluate --targets 1e-8
+python -m snapevo baseline-scan --model A --t 1 --evaluate --targets 3e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model A --t 1 --evaluate --targets 1e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model A --t 2 --evaluate --targets 3e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model A --t 2 --evaluate --targets 1e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model A --t 4 --evaluate --targets 3e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model A --t 4 --evaluate --targets 1e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model B --t 1 --evaluate --targets 3e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model B --t 1 --evaluate --targets 1e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model B --t 2 --evaluate --targets 3e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model B --t 2 --evaluate --targets 1e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model B --t 4 --evaluate --targets 3e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model B --t 4 --evaluate --targets 1e-9 --cutoff 1e-14
+python -m snapevo baseline-scan --model A --t 6 --evaluate --targets 3e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 6 --evaluate --targets 1e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 8 --evaluate --targets 3e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 8 --evaluate --targets 1e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 10 --evaluate --targets 3e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 10 --evaluate --targets 1e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 6 --evaluate --targets 3e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 6 --evaluate --targets 1e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 8 --evaluate --targets 3e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 8 --evaluate --targets 1e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 10 --evaluate --targets 3e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 10 --evaluate --targets 1e-9 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 6 --evaluate --targets 1e-8 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 8 --evaluate --targets 3e-8 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 8 --evaluate --targets 1e-8 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 10 --evaluate --targets 3e-8 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model A --t 10 --evaluate --targets 1e-8 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 8 --evaluate --targets 3e-8 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 8 --evaluate --targets 1e-8 --cutoff 1e-14 --chi-max 2048
+python -m snapevo baseline-scan --model B --t 10 --evaluate --targets 1e-8 --cutoff 1e-14 --chi-max 2048
