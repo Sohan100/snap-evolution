@@ -42,7 +42,8 @@ import numpy as np
 from snapevo.chain_snap import (NEWTON_DELTA_MAX, NEWTON_DELTA_MIN, DeadlineReached, _eig_stats, _Stop,
                                 _Stopper, newton_minimize)
 
-__all__ = ["newton_reuse_minimize", "newton_cg_minimize", "minimize_newton", "NEWTON_MODES", "FD_STEP"]
+__all__ = ["newton_reuse_minimize", "newton_cg_minimize", "lbfgs_hessian_minimize", "minimize_newton", "NEWTON_MODES",
+           "FD_STEP"]
 
 NEWTON_MODES = ("full", "reuse", "cg")
 FD_STEP = 1e-4
@@ -381,6 +382,92 @@ def newton_cg_minimize(z, objective, hessian, tol, n_bulk: int | None = None, lo
             raise DeadlineReached(f"{label} stopped ({R.stopping.why()}) after {R.done} steps; "
                                   f"checkpoint {checkpoint}") from None
         return R.finish(x, c, H_full if H_full is not None else R.H(x))
+
+
+def lbfgs_hessian_minimize(z, objective, hessian, tol, n_bulk: int | None = None, log=None,
+                           checkpoint: str | None = None, deadline: float | None = None, stop=None,
+                           label: str = "lbfgs", memory: int = 10, check_gap: int = 50,
+                           stall_window: int = 1000, stall_rel: float = 1e-5) -> tuple[np.ndarray, dict]:
+    """L-BFGS steps with the Hessian kept for the checks: a comparison arm for the ladders, not the protocol.
+
+    The steps are scipy's L-BFGS-B (``memory`` correction pairs, no bounds, ftol = gtol = 0, no iteration cap) on
+    the exact gradient. The Hessian never makes a step. A fresh one is taken at the start, to confirm convergence
+    with the Newton runs' test (_Run.converged_with: predicted Newton decrease and last decrease below ``tol``, no
+    negative bulk curvature), and at the end, so the record has a Newton run's curvature fields (eig_min_after,
+    n_neg_after, ...). The test runs when an iteration lowers c by less than ``tol``, at most once every
+    ``check_gap`` iterations. Stops: "converged" (confirmed by the Hessian), "noise floor" (L-BFGS-B's line search
+    finds no decrease), "stalled" (``stall_window`` iterations together lowered c by less than ``tol`` or
+    ``stall_rel`` x c, whichever is larger: near a minimum L-BFGS gains ~1e-6 c per 1000 iterations for days while
+    the Hessian test keeps failing, at t = 4 more than 13 hours at one depth; 1e-5 c moves no T count). Same
+    checkpoint format as the Newton runs; a resumed run starts a fresh L-BFGS memory. Records add "checks".
+    """
+    from collections import OrderedDict, deque
+
+    import scipy.optimize as sopt
+
+    R = _Run(z, objective, hessian, tol, n_bulk, log, checkpoint, deadline, stop, label, "lbfgs")
+    R.info.setdefault("checks", 0)
+    evals: OrderedDict = OrderedDict()
+    held = {"x": None, "H": None}
+
+    def fg(x):
+        key = np.asarray(x, dtype=float).tobytes()
+        if key not in evals:
+            evals[key] = R.f(np.array(x, dtype=float))
+            while len(evals) > 8:
+                evals.popitem(last=False)
+        return evals[key]
+
+    def H_at(x):
+        if held["x"] is None or not np.array_equal(held["x"], x):
+            held.update(x=np.array(x, dtype=float), H=R.H(x))
+        return held["H"]
+
+    with R.stopping:
+        st = {"x": R.start.copy(), "c": None, "last_check": -check_gap}
+        hist: deque = deque(maxlen=stall_window + 1)
+        try:
+            st["c"] = fg(st["x"])[0]
+            if "c_before" not in R.info:
+                R.begin(st["x"], st["c"], H_at(st["x"]))
+            hist.append(st["c"])
+            R.info["stop"] = None
+
+            def cb(intermediate_result):
+                x, c = np.array(intermediate_result.x, dtype=float), float(intermediate_result.fun)
+                dec = st["c"] - c
+                st.update(x=x, c=c)
+                R.done += 1
+                R.save(x, c)
+                hist.append(c)
+                if R.done % 25 == 0:
+                    R.say(f"{label}: step {R.done}, c = {c:.6e}, {R.info['hessians']} Hessians, {R.info['checks']} "
+                          f"checks, {R.info['gradients']} gradients, {time.time() - R.t0:.0f}s")
+                tl = R.tol_at(c)
+                if dec < tl and R.done - st["last_check"] >= check_gap:
+                    st["last_check"] = R.done
+                    R.info["checks"] += 1
+                    if R.converged_with(H_at(x), fg(x)[1], c, dec):
+                        R.info["stop"] = "converged"
+                        raise StopIteration
+                if len(hist) > stall_window and hist[0] - c < max(tl, stall_rel * c):
+                    R.info["stop"] = "stalled"
+                    raise StopIteration
+
+            res = sopt.minimize(fg, st["x"], jac=True, method="L-BFGS-B", callback=cb,
+                                options={"maxiter": 10 ** 9, "maxfun": 10 ** 9, "maxcor": int(memory), "ftol": 0.0,
+                                         "gtol": 0.0, "maxls": 50})
+            if R.info["stop"] is None:
+                msg = str(res.message)
+                R.info["stop"] = "noise floor" if ("ABNORMAL" in msg or "REDUCTION" in msg) else msg
+            x, c = np.asarray(res.x, dtype=float), float(res.fun)
+            if c > st["c"]:                                    # keep the last accepted point
+                x, c = st["x"], st["c"]
+            return R.finish(x, c, H_at(x))
+        except _Stop:
+            R.save(st["x"], st["c"])
+            raise DeadlineReached(f"{label} stopped ({R.stopping.why()}) after {R.done} steps; "
+                                  f"checkpoint {checkpoint}") from None
 
 
 def minimize_newton(mode: str, z, objective, hessian, tol, grad_many=None, **kw) -> tuple[np.ndarray, dict]:

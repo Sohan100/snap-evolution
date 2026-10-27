@@ -1198,9 +1198,12 @@ def _curve_min(cv, x_i: float) -> tuple[float, float, float]:
 
 
 def _admissible_mask(curve, c_max: float, S: np.ndarray) -> np.ndarray | None:
-    """snap._admissible_mask with its grid basis kept per mode set (same arithmetic)."""
+    """snap._admissible_mask with its grid basis kept per mode set (same arithmetic); a curve with its own
+    admissible(c_max, S) (imps_snap.TICurve, the infinite chain's) answers for itself."""
     if not np.isfinite(c_max):
         return None
+    if hasattr(curve, "admissible"):
+        return curve.admissible(c_max, S)
     c = np.asarray(curve.coeffs)
     m = 0.5 * np.asarray(curve.modes, dtype=float)
     n = c.shape[1]
@@ -1337,6 +1340,7 @@ def compile_chain(z_star, cell: Cell, D: int, settings: SnapSettings, objective,
             os.fsync(fh.fileno())
         os.replace(tmp, settings.checkpoint)
         last_ckpt[0] = time.time()
+        save_curves()                                       # extended windows since the last write
 
     def checkpoint_if_due() -> None:
         late = stopper()
@@ -1640,6 +1644,42 @@ def compile_chain(z_star, cell: Cell, D: int, settings: SnapSettings, objective,
         return [int(i) for i in edge_idx if not st.snapped[i]]
 
     curve_cache: OrderedDict = OrderedDict()
+    # Curves that pickle (imps_snap.TICurve) are also kept beside the checkpoint, for the angles of the checkpointed
+    # state: a resumed compile reuses them instead of rebuilding them, which at t = 4 takes hours per set. Written
+    # when they change (new curves, or extended windows), not at every checkpoint.
+    curves_file = settings.checkpoint + ".curves" if settings.checkpoint else None
+    curves_saved = [None]
+
+    def save_curves() -> None:
+        if not curves_file:
+            return
+        key = np.asarray(st.x, dtype=float).tobytes()
+        entry = curve_cache.get(key)
+        if not entry or not all(hasattr(cv, "_problem") for cv in entry.values()):
+            return
+        sig = (key, tuple(sorted((i, len(cv.windows), float(cv.cap)) for i, cv in entry.items())))
+        if sig == curves_saved[0]:
+            return
+        tmp = curves_file + ".tmp"
+        with open(tmp, "wb") as fh:
+            pickle.dump({"key": key, "curves": dict(entry)}, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, curves_file)
+        curves_saved[0] = sig
+
+    if resumed is not None and curves_file and os.path.exists(curves_file):
+        try:
+            with open(curves_file, "rb") as fh:
+                saved = pickle.load(fh)
+            if saved["key"] == np.asarray(st.x, dtype=float).tobytes():
+                problem, z_saved = getattr(envs_at, "__self__", None), np.frombuffer(saved["key"], dtype=float).copy()
+                for cv in saved["curves"].values():
+                    cv._problem, cv._z = problem, z_saved
+                curve_cache[saved["key"]] = dict(saved["curves"])
+                say(f"snap: reused {len(saved['curves'])} saved curves at the checkpointed angles")
+        except Exception as exc:                            # a stale or partial file: rebuild as before
+            say(f"snap: saved curves not reused ({type(exc).__name__}: {exc})")
 
     def curves_at(x, indices) -> dict:
         """Curves at exactly x, cached by the bytes of x; environments only for the sublayers needed, then released."""
@@ -1668,6 +1708,8 @@ def compile_chain(z_star, cell: Cell, D: int, settings: SnapSettings, objective,
         curve_cache.move_to_end(key)
         while len(curve_cache) > 4:
             curve_cache.popitem(last=False)
+        if missing:
+            save_curves()
         return {int(i): have[int(i)] for i in indices}
 
     e_res2 = (2.0 ** (-(settings.reserve_t - B_GEN) / A_GEN)) ** 2 if settings.reserve_t > 0 else 0.0
@@ -1724,6 +1766,10 @@ def compile_chain(z_star, cell: Cell, D: int, settings: SnapSettings, objective,
     def library_allocation(rest, curves, residual, c_now):
         """Each straggler takes a library angle or KN synthesis, by a Lagrangian sweep."""
         opts = {}
+        first = next(iter(rest), None)
+        if first is not None and hasattr(curves[first], "prefetch"):        # imps_snap.TICurve: batched
+            curves[first].prefetch({i: curves[i] for i in rest},
+                                     {i: c_now + residual * (1.0 + 1e-9) for i in rest})
         for i in rest:
             cv = curves[i]
             m = _admissible_mask(cv, c_now + residual * (1.0 + 1e-9), S)
@@ -2008,6 +2054,10 @@ def compile_chain(z_star, cell: Cell, D: int, settings: SnapSettings, objective,
         J = np.tile(order[starts][:, None], (1, M))
         EC = np.full((n_lev, M), np.inf)
         lazy = []
+        if settings.prefilter and free and hasattr(curves[free[0]], "prefetch"):    # imps_snap.TICurve: batched
+            curves[free[0]].prefetch({i: curves[i] for i in free},
+                                     {i: (eps0 + (ceiling[a] - eps0) / rfrac[a]) if rfrac[a] > 1e-12 else None
+                                      for a, i in enumerate(free)})
         for a, i in enumerate(free):
             mask = None
             if settings.prefilter and rfrac[a] > 1e-12:
@@ -2016,6 +2066,8 @@ def compile_chain(z_star, cell: Cell, D: int, settings: SnapSettings, objective,
                 cand = np.flatnonzero(mask)
                 J[:, a], EC[:, a] = best_per_level_subset(cand, np.asarray(curves[i].c_at(S[cand])))
             elif settings.prefilter:
+                if hasattr(curves[i], "extend"):            # imps_snap.TICurve: exact over the whole period
+                    curves[i].extend(math.inf)
                 lazy.append(a)
             else:
                 ec = np.asarray(curves[i].c_at(S))

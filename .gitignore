@@ -18,3 +18,6 @@ runs/**/ring2/ckpt/
 runs/**/lock
 *.ckpt.json
 ._dbindex_/
+*.busy
+*.ckpt.pkl.curves
+runs/kn_cache.d/

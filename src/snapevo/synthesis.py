@@ -22,6 +22,7 @@ import cmath
 import json
 import math
 import os
+import socket
 import sys
 import threading
 from contextlib import contextmanager
@@ -35,7 +36,7 @@ from snapevo import io
 __all__ = ["KN_DIR", "kn_law", "kn_cost", "kn_eps", "synthesize", "branch_unitaries", "unitary_diamond"]
 
 KN_DIR = "kliuchnikov_nonmixed_2026-10-05"
-_lock = threading.Lock()
+_lock = threading.RLock()                       # synthesize() holds it around _cache_lock
 
 
 @contextmanager
@@ -189,6 +190,84 @@ def _cache_path() -> Path:
     return base / "kn_cache.json"
 
 
+# The cache as this process knows it: kn_cache.json (re-read only when its size or mtime changes) plus the journals
+# (kn_cache.d/<host>_<pid>.jsonl, one per process, append-only, read from where this process left off). Reading
+# and rewriting the whole file under one exclusive lock on every call (22 MB by 25 Oct 2026) queued dozens of jobs
+# behind each other for up to an hour; now a hit costs a dict lookup and a miss appends one line. merge_journals()
+# folds the journals into kn_cache.json when nothing else is running.
+_mem: dict = {"path": None, "stamp": None, "cache": {}, "journal": {}}
+
+
+def _journal_dir(path: Path) -> Path:
+    return path.with_name(path.stem + ".d")
+
+
+def _known(path: Path, key: str, fresh: bool) -> dict | None:
+    """The record for key from memory; with ``fresh`` (a miss) first reload whatever changed on disk."""
+    if _mem["path"] != path:
+        _mem.update(path=path, stamp=None, cache={}, journal={})
+    if key in _mem["cache"] and not fresh:
+        return _mem["cache"][key]
+    try:
+        st = path.stat()
+        stamp = (st.st_size, st.st_mtime_ns)
+    except FileNotFoundError:
+        stamp = None
+    if stamp is not None and stamp != _mem["stamp"]:
+        with _cache_lock(path):
+            _mem["cache"].update(io.read_json(path))
+        _mem["stamp"] = stamp
+    jd = _journal_dir(path)
+    if jd.is_dir():
+        for f in sorted(jd.glob("*.jsonl")):
+            pos = _mem["journal"].get(f.name, 0)
+            with open(f, "rb") as fh:
+                fh.seek(pos)
+                chunk = fh.read()
+            end = chunk.rfind(b"\n") + 1                     # complete lines only (a writer may be mid-line)
+            for line in chunk[:end].splitlines():
+                if line.strip():
+                    e = json.loads(line)
+                    _mem["cache"][e["key"]] = e["rec"]
+            _mem["journal"][f.name] = pos + end
+    return _mem["cache"].get(key)
+
+
+def _record(path: Path, key: str, rec: dict) -> None:
+    """Keep a new synthesis: into kn_cache.json if there is none yet, else onto this process's journal."""
+    _mem["cache"][key] = rec
+    if not path.exists():
+        with _cache_lock(path):
+            cache = io.read_json(path) if path.exists() else {}
+            cache[key] = rec
+            io.write_json(path, cache, indent=None)
+        return
+    jd = _journal_dir(path)
+    jd.mkdir(exist_ok=True)
+    with open(jd / f"{socket.gethostname()}_{os.getpid()}.jsonl", "a") as fh:
+        fh.write(json.dumps({"key": key, "rec": rec}) + "\n")
+
+
+def merge_journals(path: Path | None = None) -> int:
+    """Fold kn_cache.d/*.jsonl into kn_cache.json and remove them; returns the number of new entries. Run it only
+    when no process is synthesizing (one still appending to a journal would lose what it writes after the merge)."""
+    path = path or _cache_path()
+    jd = _journal_dir(path)
+    files = sorted(jd.glob("*.jsonl")) if jd.is_dir() else []
+    with _cache_lock(path):
+        cache = io.read_json(path) if path.exists() else {}
+        n0 = len(cache)
+        for f in files:
+            for line in f.read_text().splitlines():
+                if line.strip():
+                    e = json.loads(line)
+                    cache[e["key"]] = e["rec"]
+        io.write_json(path, cache, indent=None)
+    for f in files:
+        f.unlink()
+    return len(cache) - n0
+
+
 def _key(theta: float, eps: float) -> str:
     return f"{math.remainder(theta, 2 * math.pi):.15f}|{eps:.6e}"
 
@@ -207,10 +286,12 @@ def synthesize(theta: float, eps: float, use_cache: bool = True, unitaries: bool
     key = _key(theta, eps)
     path = _cache_path()
     if use_cache:
-        with _cache_lock(path):
-            cache = io.read_json(path) if path.exists() else {}
-        if key in cache and (not unitaries or "U0" in cache[key]):
-            return _unwrap(cache[key], theta)
+        with _lock:
+            rec = _known(path, key, fresh=False)
+            if rec is None or (unitaries and "U0" not in rec):
+                rec = _known(path, key, fresh=True)
+        if rec is not None and (not unitaries or "U0" in rec):
+            return _unwrap(rec, theta)
     # Isaac's synthesize() runs best_protocol and then searches again to rebuild the gate
     # words, which we do not use. Calling best_protocol directly gives the same protocol and
     # branch unitaries in about half the time, and _patch_search cuts the search itself
@@ -231,10 +312,8 @@ def synthesize(theta: float, eps: float, use_cache: bool = True, unitaries: bool
            "theta_s": theta_s, "d0": float(r["d0"]), "d1": float(r["d1"]),
            "d_branch": d_branch, "bound": float(r["bound"]), "U0": mat(U0), "U1": mat(U1)}
     if use_cache:
-        with _cache_lock(path):
-            cache = io.read_json(path) if path.exists() else {}
-            cache[key] = out
-            io.write_json(path, cache, indent=None)
+        with _lock:
+            _record(path, key, out)
     return _unwrap(out, theta)
 
 

@@ -8,7 +8,7 @@ from snapevo.chain_snap import ChainProblem, DeadlineReached, newton_minimize
 from snapevo.circuits import product_vectors, random_product_states
 from snapevo.hamiltonian import XXZ, evolve
 from snapevo.mps_train import mps_from_dense
-from snapevo.newton_fast import minimize_newton, newton_cg_minimize, newton_reuse_minimize
+from snapevo.newton_fast import lbfgs_hessian_minimize, minimize_newton, newton_cg_minimize, newton_reuse_minimize
 from snapevo.train_chain import trotter_z
 
 
@@ -140,3 +140,37 @@ def test_a_full_newton_checkpoint_resumes_under_reuse(tmp_path):
         z, info = newton_reuse_minimize(z0, P.objective, hess, tol, n_bulk=nb, checkpoint=ck)
     assert steps_before >= 1 and info["steps"] >= steps_before and info["c_before"] > info["c_after"]
     assert info["stop"] == "converged" and info["c_after"] <= ref * (1 + 1e-3)
+
+
+@pytest.mark.parametrize("hx", (0.0, 1.6))
+def test_lbfgs_arm_keeps_the_hessian_checks_and_resumes(hx, tmp_path):
+    import threading
+    model = XXZ(0.25, hx)
+    cell = cell_for(model)
+    N, t, D = 6, 0.6, 4
+    vecs, targets = _problem(model, N, t)
+    z0 = trotter_z(model, cell, t, D) + 0.05 * np.random.default_rng(2).normal(size=trotter_z(model, cell, t, D).size)
+    nb = D * cell.n_angles
+    ck = str(tmp_path / "lbfgs.json")
+    with ChainProblem(model, cell, t, D, N, vecs, targets, chi_max=10 ** 6, cutoff=0.0, groups=3, local=True) as P:
+        hess = lambda zz, rows: P.hessian(zz, rows)              # noqa: E731
+        tol = lambda c: 1e-6 * c                                 # noqa: E731
+        ref = newton_reuse_minimize(z0, P.objective, hess, tol, n_bulk=nb)[1]["c_after"]
+        ev, calls = threading.Event(), {"n": 0}
+
+        def obj(zz):
+            calls["n"] += 1
+            if calls["n"] == 12:
+                ev.set()
+            return P.objective(zz)
+        with pytest.raises(DeadlineReached):
+            lbfgs_hessian_minimize(z0, obj, hess, tol, n_bulk=nb, checkpoint=ck, stop=ev, check_gap=5)
+        doc = json.loads(open(ck).read())
+        assert doc["steps"] >= 1 and doc["info"]["mode"] == "lbfgs" and "eig_min_before" in doc["info"]
+        z, info = lbfgs_hessian_minimize(z0, P.objective, hess, tol, n_bulk=nb, checkpoint=ck, check_gap=5)
+    assert info["mode"] == "lbfgs" and info["kept"] and info["steps"] > doc["steps"]
+    assert info["stop"] in ("converged", "noise floor", "stalled")
+    assert "eig_min_after" in info and "n_neg_after" in info and info["hessians"] >= 2
+    if info["stop"] == "converged":
+        assert info["checks"] >= 1 and info["pred"] < 1e-6 * info["c_after"] * (1 + 1e-9)
+    assert info["c_after"] <= ref * 1.05, (info["c_after"], ref)

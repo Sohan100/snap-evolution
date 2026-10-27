@@ -1,68 +1,79 @@
 # snap-evolution
 
-SNAP compilation of XXZ time evolution onto Isaac's corrected exact-angle library, with errors measured by plugging in the Clifford+T circuits. This is the time-evolution code for paper 1. It uses no catalysis and only unmixed (deterministic) synthesis, as decided on the 5 Oct 2026 call.
+Compilation of quantum time evolution into Clifford+T circuits with SNAP, applied to the one-dimensional XXZ model. The repository contains the circuit training, the SNAP compiler, the synthesis of the remaining rotations, the error evaluation and the product-formula baselines behind the time-evolution results, together with the run outputs and figures.
 
-The pipeline trains a translation-invariant brickwork for $e^{-iHt}$ on a ring and snaps its rotations onto the RUS library with the Hessian-ranked protocol. It then synthesizes the leftover rotations with Kliuchnikov non-mixed, fits rotations for the two ends of an open chain, and computes the state infidelity of the realized circuit on random product inputs at $N = 100$ with MPS, against an MPS of the exact evolution. Nothing is extrapolated. The heralded fallback branches of the KN rotations are drawn in the MPS runs, and those of the library gadgets are bounded. A product-formula baseline goes through the same evaluation. The small-ring metrics we used before (operator norm, diamond norm, process fidelity) remain as cross-checks.
+## Overview
 
-## Install
+The target is the evolution operator $U = e^{-iHt}$ of the XXZ chain
+
+$$H = \sum_i \left( S^x_i S^x_{i+1} + S^y_i S^y_{i+1} + \Delta\, S^z_i S^z_{i+1} \right) + h_x \sum_i S^x_i ,$$
+
+with $\Delta = 0.25$ and $J = 1$ in spin units, at $h_x = 0$ and $h_x = 1.6$, for evolution times $t = 1$ to $4$. Every stage works on the infinite chain, so the circuits and their errors are translation invariant and independent of system size.
+
+1. **Training.** A brickwork circuit with a two-site unit cell, in which every bond of a sublayer carries the same gate, is trained depth by depth to approximate $U$. The cost is the infidelity per site, obtained from the leading eigenvalue of the mixed transfer matrix between the circuit output and the exactly evolved state (iTEBD), averaged over four random iMPS of bond dimension 2. Each depth is optimized by trust-region Newton with the exact gradient and Hessian, from three starting points.
+2. **Compilation.** For a given error budget, SNAP moves rotation angles onto exact Clifford+T angles from a precomputed library, starting with Clifford angles at zero T cost. Candidates are ranked with the Hessian, and the remaining angles are re-optimized after every accepted move. Rotations that are not moved are synthesized individually, each at a precision set by its sensitivity.
+3. **Synthesis.** Remaining rotations use probabilistic synthesis with a fallback branch [1]. Fallback events enter in expectation, as independent local defects, which keeps the evaluation translation invariant.
+4. **Evaluation.** Every circuit is scored by its infidelity per site, $1 - F$, averaged over 100 random iMPS that are not used in training, together with its expected T count per qubit and per rotation.
+5. **Baselines.** Product formulas of order 1, 2 and 4, scanned over the number of steps and the synthesis precision, with every rotation synthesized either by the same fallback synthesis or by GridSynth [2]; and uniform-precision synthesis of the trained circuits [3]. All baselines are evaluated with the same metric on the same test states.
+
+## Installation
 
 Python 3.10 or newer.
 
 ```
 python -m venv .venv
-.venv\Scripts\activate            (on Linux or macOS: source .venv/bin/activate)
-pip install -e .[test]
-python -m snapevo verify-library  (independent check of the library file, ~30 s)
-pytest                            (35 tests, ~2 min)
+source .venv/bin/activate
+pip install -e ".[test,plot]"
+pytest
 ```
 
-## Run one point
+## Usage
+
+Each command takes the field $h_x$ (`1.6` or `0`) and the evolution time $t$, and resumes from its checkpoints when rerun.
 
 ```
-python -m snapevo train         --model B --t 2 --depths 7,9,11,13
-python -m snapevo point         --model B --t 2 --budget 1e-4 --margins 3,30
-python -m snapevo baseline-scan --model B --t 2 --evaluate --targets 1e-4
-python -m snapevo sample        --model B --t 2    (draw the KN fallbacks of every evaluated point)
-python -m snapevo report        --model B --t 2
-python -m snapevo summary                          (every point of every model and time, one CSV)
-python -m snapevo compare                          (SNAP against the baseline at equal infidelity)
-python -m snapevo plot                             (runs/figures, needs pip install -e .[plot])
+python cluster/imps_train.py   1.6 3 --workers 32     # train the depth ladder
+python cluster/imps_snap.py snap    1.6 3 --workers 32   # SNAP at the error budgets 1e-1 ... 1e-6
+python cluster/imps_snap.py uniform 1.6 3 --workers 32   # uniform-precision synthesis of the same circuits
+python cluster/imps_snap.py reeval  1.6 3 --workers 32   # re-evaluate every realized circuit
+python cluster/ti_trotter.py    1.6 3 --workers 32     # product formulas with fallback synthesis
+python cluster/ti_trotter_gs.py 1.6 3 --workers 32     # the same formulas with GridSynth
+python cluster/ti_paper_figs.py --times 1,2,3,4        # figures
 ```
 
-`--model A` has $h_x = 1.6$ and `--model B` has no field (spin units, $\Delta = 0.25$). Times are in spin units. `point` runs `compile`, `realize` and `evaluate`, which also exist as separate commands, once per depth that its floor margins pick, and `evaluate` builds the MPS references on first use (`reference` builds them ahead). Output goes to `runs/` (`docs/conventions.md` lists the files and their keys). The full sweep up to $t = 10$ runs on a cluster from `cluster/` (`cluster/README.md`).
+Results are written to `runs/xxz_d0.25_hx<h_x>/t<t>/`: the trained ladder in `imps_train/`, the compiled, realized and evaluated circuits in `imps_snap/`, and the uniform-precision circuits in `imps_uniform/`. The product-formula scans are in `runs/ti/imps_trotter/` and `runs/ti/imps_trotter_gs/`, and the figures in `runs/figures/ti/paper/`.
 
-## Layout
+### Running at scale
+
+The scripts in `cluster/` run the same steps under Slurm. `imps_chain.slurm` compiles one ladder on a compute node, and `imps_points.slurm` adds further workers to the same ladder: each budget and depth is locked while it is compiled, so any number of workers share the remaining points without duplicating work. `imps_split.py` trains the starting points of a depth on separate nodes. Jobs stop shortly before their time limit, checkpoint, and resubmit themselves.
+
+## Repository layout
 
 ```
-docs/plan.md            the simulation plan: models, the t sweep, stages, where it runs
-docs/error_metric.md    the reported error (MPS state infidelity at N = 100), edges, fallbacks, cross-checks
-docs/cost_model.md      library and KN pricing, provenance, what is left out
-docs/conventions.md     units, gates, angle order, file formats
-docs/validation.md      checks run on the library, the port, the MPS code, the first runs and the budget sweep
 src/snapevo/
-  hamiltonian.py        models A and B on a ring or an open chain, exact evolution
-  cells.py              brickwork cells (xxz+stag, xxz+x)
-  circuits.py           state-vector simulation (ring or open chain), C, held-out C, state sets
-  jaxcost.py            JAX value, gradient and Hessian of C
-  train.py              depth-ladder training
-  library.py            corrected RUS library, pricing at fallback cost F
-  synthesis.py          KN non-mixed wrapper, calibrated cost law, cache with a lock
-  environment.py        exact single-angle C curves
-  snap.py               Hessian-ranked SNAP compiler
-  realize.py            plug in the Clifford+T circuits, error ledger
-  edges.py              edge rotations for the open chain: fit, keep or drop, KN
-  mps.py                open-chain MPS, circuits and the order-4 reference, cached references
-  evaluate.py           MPS state infidelity at N = 100, fallback bound, choice of F
-  fallbacks.py          the same with the KN fallback branches drawn
-  baseline.py           product formulas + KN, scan and Pareto front
-  crosscheck.py         small-ring op norm, diamond and process fidelity (checks)
-  library_check.py      independent verification of the library file
-  cli.py, io.py         command line, run-file layout
-third_party/            Isaac's two packages from 2026-10-05, unmodified, with SHA256SUMS
-cluster/                job lists, SLURM array script, submit and local runners for the t sweep
-tests/                  pytest suite
+  hamiltonian.py      XXZ model, exact evolution
+  cells.py            brickwork cells and their gates
+  imps.py             iMPS, mixed transfer matrices and environments
+  imps_train.py       infinite-chain training: cost, gradient, Hessian, depth ladder
+  newton_fast.py      trust-region Newton and the L-BFGS comparison optimizer
+  imps_snap.py        SNAP on the infinite chain: single-angle cost curves, fallback defects, evaluation
+  chain_snap.py       the SNAP compiler
+  library.py          exact-angle Clifford+T library and its pricing
+  synthesis.py        synthesis wrapper with a shared cache
+  realize.py          substitution of the Clifford+T circuits
+  fallbacks.py        fallback branches of the synthesized rotations
+  baseline.py         product formulas
+cluster/              command-line entry points and Slurm scripts
+tests/                test suite
+docs/                 conventions, cost model, error metric and validation notes
+third_party/          the rotation library and the synthesis package, unmodified, with SHA256 checksums
+runs/                 run outputs and figures
 ```
 
-## Provenance
+The finite-system workflow used earlier in the project (ring and open-chain training, MPS evaluation) remains available through `python -m snapevo` and is documented in `docs/`.
 
-`snap.py`, `environment.py`, `train.py` and the JAX cost are ported from `tcount_tfim` (work\rust, Sep 2026). On the same cell, states and library the ported compiler reproduces the old one exactly (`docs/validation.md`). Catalysis, the $k\pi/12$ angles, the environment-criterion escalation and the tier ladders were left behind. The library and the KN synthesizer are Isaac Kim's, and their files are unchanged. `synthesis.py` calls the synthesizer's `best_protocol` directly and gives its search a faster T count for the candidates, which gives the same results bit for bit (`docs/validation.md`).
+## References
+
+1. arXiv:2203.10064, probabilistic single-qubit synthesis with fallback.
+2. arXiv:1403.2975, optimal ancilla-free Clifford+T approximation of $z$-rotations (GridSynth).
+3. arXiv:2506.02105, compression and synthesis of time-evolution circuits on the infinite chain.

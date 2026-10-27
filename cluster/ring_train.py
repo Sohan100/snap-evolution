@@ -1,6 +1,7 @@
 """Train one ring ladder, best of Newton and uncapped L-BFGS-B per start (snapevo.train_ring_best).
 
     python cluster/ring_train.py FIELD T [--depths 2,3,5,...] [--workers 6] [--runs DIR] [--deadline EPOCH]
+                                 [--optimizers newton --out-sub ring_newton]
 
 FIELD is 1.6 or 0 (XXZ chain, Delta = 0.25, h_x = FIELD); T is the evolution time. The depths default to the
 production grid (cluster/make_jobs.py's DEPTHS[T] and every depth in runs/<tag>/t<T>/cells.json); the ladder
@@ -38,6 +39,9 @@ def main() -> int:
     ap.add_argument("--deadline", type=float, default=None, help="epoch seconds: checkpoint and stop after")
     ap.add_argument("--target", type=float, default=1e-10)
     ap.add_argument("--stall", default="1.5,8")
+    ap.add_argument("--optimizers", default="newton,lbfgs",
+                    help="comma-separated, from newton and lbfgs (newton alone: the protocol's trust-region Newton)")
+    ap.add_argument("--out-sub", default="ring2", dest="out_sub", help="runs/<tag>/t<T>/<out-sub>/ladder.json")
     a = ap.parse_args()
 
     from snapevo.hamiltonian import XXZ
@@ -64,7 +68,9 @@ def main() -> int:
 
     log(f"ring ladder: pid {os.getpid()}, depths {depths}, workers {a.workers}, runs {runs}, deadline {a.deadline}")
     t0 = time.time()
-    out = train_ring_ladder_best(model, t, depths, runs=runs, stall=(float(fac), int(win)), target=a.target,
+    out = train_ring_ladder_best(model, t, depths, runs=runs, out_sub=a.out_sub,
+                                 optimizers=tuple(v for v in a.optimizers.split(",") if v),
+                                 stall=(float(fac), int(win)), target=a.target,
                                  deadline=a.deadline, workers=a.workers, hessian_workers=a.hessian_workers,
                                  stop=term, log=log)
     stopped = term.is_set() or (a.deadline is not None and time.time() > a.deadline)

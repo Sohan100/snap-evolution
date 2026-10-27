@@ -38,12 +38,14 @@ F_GRID = (18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0)
 
 
 def realize(compiled: dict, model: XXZ, cell: Cell, t: float, N: int = 10,
-            tighten: float = 0.5, max_tries: int = 6, log=print) -> dict:
+            tighten: float = 0.5, max_tries: int = 6, log=print, c_fn=None) -> dict:
     """Price every rotation and build the realized (success-branch) angle vector.
 
     KN stragglers are synthesized at the compiler's allotted eps. If the
     realized training C then exceeds the budget, every straggler eps is
     multiplied by ``tighten`` and the stragglers are synthesized again.
+    The training C is the N-site ring's, or ``c_fn(angles)`` when given (the
+    infinite chain's, imps_snap).
     """
     x = np.asarray(compiled["angles"], dtype=float)
     snapped = np.asarray(compiled["snapped"], dtype=bool)
@@ -63,7 +65,8 @@ def realize(compiled: dict, model: XXZ, cell: Cell, t: float, N: int = 10,
                             "cost": {f"{F:g}": c for F, (c, q) in priced.items()},
                             "q": {f"{F:g}": q for F, (c, q) in priced.items()}}
 
-    tin, tg = state_pairs(model, N, t, TRAIN_SET[1], TRAIN_SET[0])
+    if c_fn is None:
+        tin, tg = state_pairs(model, N, t, TRAIN_SET[1], TRAIN_SET[0])
     eps_plan = {int(k): float(v["eps"]) for k, v in compiled["stragglers"].items()}
     scale = 1.0
     for attempt in range(max_tries):
@@ -71,7 +74,8 @@ def realize(compiled: dict, model: XXZ, cell: Cell, t: float, N: int = 10,
         x_real = x.copy()
         for i, r in kn_rows.items():
             x_real[i] = r["theta_s"]
-        c_real = local_infidelity(Layered.brickwork(cell, x_real).apply(tin, N), tg, N)
+        c_real = float(c_fn(x_real)) if c_fn is not None else \
+            local_infidelity(Layered.brickwork(cell, x_real).apply(tin, N), tg, N)
         log(f"realize: {len(lib_rows)} lattice angles, {len(kn_rows)} KN stragglers (eps x {scale:g}), "
             f"C_train {c_real:.3e} vs budget {budget:.3e}")
         if c_real <= budget * (1 + 1e-9) or not kn_rows:
