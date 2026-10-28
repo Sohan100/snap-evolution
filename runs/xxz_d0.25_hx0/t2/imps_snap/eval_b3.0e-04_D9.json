@@ -1,0 +1,68 @@
+{
+ "model": {
+  "delta": 0.25,
+  "hx": 0.0,
+  "J": 1.0
+ },
+ "cell": "xxz+stag",
+ "t": 2,
+ "D": 9,
+ "budget": 0.0003,
+ "n_free": 20,
+ "n_t": 0,
+ "n_rus": 16,
+ "n_kn": 0,
+ "arm": "ti",
+ "train_set": [
+  7101,
+  4
+ ],
+ "metric": "per site on the 100 random chi = 2 iMPS test inputs (imps_train): c_fallbacks with every synthesized rotation falling back independently (fallback_terms), c on the success branch",
+ "c_fallbacks": 0.000332662707587361,
+ "c_fallbacks_se": 8.791919050486875e-06,
+ "c_kn_only": 0.00033265816832503956,
+ "fallbacks_per_cell": 0.08505704396712743,
+ "worst_rho": 0.9999998486842884,
+ "c": 0.00033265816832423687,
+ "c_se": 8.791811479558304e-06,
+ "F": "22",
+ "Tq": 43.636456037846834,
+ "T_edges_per_qubit": 0.0,
+ "rotations_per_qubit": 22.5,
+ "T_per_rotation": 1.9393980461265259,
+ "T_per_qubit_per_time": 21.818228018923417,
+ "ledger_per_qubit": 6.39359478399228e-07,
+ "c_plus_ledger": 0.0003332975278026361,
+ "per_F": {
+  "18": {
+   "Tq": 43.466341949912575,
+   "ledger_per_qubit": 8.025432500941182e-06
+  },
+  "20": {
+   "Tq": 43.5513989938797,
+   "ledger_per_qubit": 2.265201169373257e-06
+  },
+  "22": {
+   "Tq": 43.636456037846834,
+   "ledger_per_qubit": 6.39359478399228e-07
+  },
+  "24": {
+   "Tq": 43.72151308181396,
+   "ledger_per_qubit": 1.8046103284152752e-07
+  },
+  "26": {
+   "Tq": 43.806570125781086,
+   "ledger_per_qubit": 5.0935640237581424e-08
+  },
+  "28": {
+   "Tq": 43.89162716974822,
+   "ledger_per_qubit": 1.437672945544231e-08
+  },
+  "30": {
+   "Tq": 43.976684213715345,
+   "ledger_per_qubit": 4.057872815005501e-09
+  }
+ },
+ "C_train_real": 0.0002982561198003886,
+ "over_budget": false
+}

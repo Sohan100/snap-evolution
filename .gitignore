@@ -16,6 +16,8 @@ runs/**/chain/ckpt/
 runs/**/chain/lock
 runs/**/ring2/ckpt/
 runs/**/lock
+runs/**/lock_*
+runs/**/imps_train*/ckpt/
 *.ckpt.json
 ._dbindex_/
 *.busy
